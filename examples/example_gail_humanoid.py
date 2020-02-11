@@ -172,7 +172,7 @@ def _create_gail_agent(mdp, **kwargs):
                       )
 
     # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
-    expert_files = np.load("../expert_data/humanoid_gait_trajectory.npz")
+    expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
     states = expert_files["trajectory_data"].T[:, 2:29]
 
     from mushroom_rl.utils.spaces import Box
@@ -275,7 +275,7 @@ def _create_vail_agent(mdp, **kwargs):
 
 
     # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
-    expert_files = np.load("../expert_data/humanoid_gait_trajectory.npz")
+    expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
     states = expert_files["trajectory_data"].T[:, 2:29]
 
     from mushroom_rl.utils.spaces import Box
@@ -357,5 +357,6 @@ def experiment(algorithm):
 
 
 if __name__ == "__main__":
+    # not working yet
     algorithm = ["GAIL", "VAIL"]
     experiment(algorithm=algorithm[1])

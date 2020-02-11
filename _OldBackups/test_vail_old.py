@@ -13,8 +13,8 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from mushroom_rl_imitation._OldBackups.vail_old import VAIL
-from mushroom_rl_imitation._OldBackups.dataset_from_baselines import ExpertDataset
+from _OldBackups.vail_old import VAIL
+from _OldBackups.dataset_from_baselines import ExpertDataset
 
 
 class ActorNetwork(nn.Module):
@@ -128,7 +128,7 @@ def _create_vail_agent(mdp):
     policy_params = {**policy_params, **torch_approx_params}
 
     # batch size should have same size as n_steps_per_fit
-    dataset = ExpertDataset(expert_path='../expert_data/expert_dataset_pendulum_SAC_120.npz',
+    dataset = ExpertDataset(expert_path='../examples/expert_data/expert_dataset_pendulum_SAC_120.npz',
                             train_fraction=0.99, batch_size=1024,
                             randomize=True, verbose=False, traj_limitation=10,
                             sequential_preprocessing=True)
@@ -144,7 +144,7 @@ def init_policy_with_bc(agent, normalizer=None):
         normalizer = lambda x: x
 
     # load expert training data
-    expert_files = np.load("../expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("../examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = normalizer(expert_files["obs"])[:200*10]
     outputs = expert_files["actions"][:200*10]
 
@@ -160,7 +160,7 @@ def test_vail(init_bc=False):
     # train_expert_from_scratch_and_save_trajectories()
     # input()
 
-    from mushroom_rl_imitation.wrapping_envs.PlottingEnv import PlottingEnv
+    from _wrapping_envs.PlottingEnv import PlottingEnv
     mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
                                                      horizon=200, gamma=0.99))
 

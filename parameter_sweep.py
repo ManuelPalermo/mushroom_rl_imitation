@@ -162,7 +162,7 @@ def _create_vail_agent(mdp, disc_only_state, **kwargs):
     policy_params = {**policy_params, **torch_approx_params}
 
     # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = expert_files["obs"][:200*10]
     outputs = expert_files["actions"][:200*10]
     demonstrations = (dict(states=inputs, actions=None)
@@ -260,7 +260,7 @@ def _create_gail_agent(mdp, disc_only_state, **kwargs):
     policy_params = {**policy_params, **torch_approx_params}
 
     # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = expert_files["obs"][:200*10]
     outputs = expert_files["actions"][:200*10]
     demonstrations = (dict(states=inputs, actions=None)
@@ -278,7 +278,7 @@ def init_policy_with_bc(agent, normalizer=None):
         normalizer = lambda x: x
 
     # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = normalizer(expert_files["obs"])[:200*10]
     outputs = expert_files["actions"][:200*10]
 
@@ -292,7 +292,7 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
     print("\n------------------------ EXPERIENCE {} ---------------------------".format(exp_id))
 
     if use_plot:
-        from mushroom_rl_imitation.wrapping_envs.PlottingEnv import PlottingEnv
+        from _wrapping_envs.PlottingEnv import PlottingEnv
         mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
                                                          horizon=200, gamma=0.99))
     else:
@@ -300,10 +300,10 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
 
 
     if traj_id == 0:
-        traj_path = "expert_data/expert_dataset_pendulum_v0.npz"
+        traj_path = "examples/expert_data/expert_dataset_pendulum_v0.npz"
         preprocessors = [lambda x:x]
     elif traj_id == 1:
-        traj_path = "expert_data/expert_dataset_pendulum_SAC_120.npz"
+        traj_path = "examples/expert_data/expert_dataset_pendulum_SAC_120.npz"
         preprocessors = [NormalizationBoxedPreprocessor(mdp_info=mdp.info)]
     else:
         raise NotImplementedError

@@ -108,7 +108,7 @@ def _create_ppo_agent(mdp):
 
 def experiment(use_plot=False):
     if use_plot:
-        from mushroom_rl_imitation.wrapping_envs.PlottingEnv import PlottingEnv
+        from _wrapping_envs.PlottingEnv import PlottingEnv
         mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
                                                          horizon=200, gamma=0.99))
     else:
@@ -126,7 +126,7 @@ def experiment(use_plot=False):
     print('Before BC -> J: {}, R: {}'.format(J_mean, R_mean))
 
     # load expert training data
-    expert_files = np.load("../expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = norm_preprocessor(expert_files["obs"])
     outputs = expert_files["actions"]
 

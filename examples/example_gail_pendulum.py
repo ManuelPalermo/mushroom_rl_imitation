@@ -179,7 +179,7 @@ def _create_gail_agent(mdp, disc_only_state=False, **kwargs):
     policy_params = {**policy_params, **torch_approx_params}
 
     # load expert training data
-    expert_files = np.load("../expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = expert_files["obs"][:200*10]
     outputs = expert_files["actions"][:200*10]
     demonstrations = dict(states=inputs, actions=outputs)
@@ -280,7 +280,7 @@ def _create_vail_agent(mdp, disc_only_state=False, **kwargs):
     policy_params = {**policy_params, **torch_approx_params}
 
     # load expert training data
-    expert_files = np.load("../expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = expert_files["obs"][:200*10]
     outputs = expert_files["actions"][:200*10]
     demonstrations = (dict(states=inputs, actions=outputs))
@@ -296,7 +296,7 @@ def init_policy_with_bc(agent, normalizer=None):
         normalizer = lambda x: x
 
     # load expert training data
-    expert_files = np.load("../expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
     inputs = normalizer(expert_files["obs"])[:200*10]
     outputs = expert_files["actions"][:200*10]
 
