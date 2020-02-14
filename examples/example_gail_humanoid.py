@@ -18,8 +18,6 @@ from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J, episodes_length
 
 
-
-
 class CriticNetwork(nn.Module):
     # For sac agent
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
@@ -106,11 +104,11 @@ def _create_gail_agent(mdp, **kwargs):
     # Settings
     network_layers_actor = (512, 256)
     network_layers_critic = (512, 256)
-    network_layers_discriminator = 512
+    network_layers_discriminator = (256, 128)
 
-    lr_actor = 1e-4
+    lr_actor = 5e-5
     lr_critic = 1e-4
-    lr_discriminator = 1e-4
+    lr_discriminator = 5e-5
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
@@ -120,11 +118,11 @@ def _create_gail_agent(mdp, **kwargs):
     batch_size_policy = 256
     clip_eps_ppo = .2
     gae_lambda = .95
-    policy_std_0 = 0.1
+    policy_std_0 = 0.3
 
     batch_size_discriminator = 256
 
-    discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
+    discrim_obs_mask = np.arange(0, 27)
     discrim_act_mask = []
     discrim_input_shape = (len(discrim_obs_mask) + len(discrim_act_mask),)
 
@@ -154,6 +152,7 @@ def _create_gail_agent(mdp, **kwargs):
 
                                 network=DiscriminatorNetwork,
                                 input_shape=discrim_input_shape,
+                                output_shape=(1,),
                                 n_features=network_layers_discriminator,
                                 use_cuda=use_cuda,
                                 )
@@ -171,21 +170,17 @@ def _create_gail_agent(mdp, **kwargs):
                       quiet=True
                       )
 
+    # TorchApproximator parameters (used for behaviour cloning)
+    torch_approx_params = dict(batch_size=128,
+                               optimizer={'class':  optim.Adam,
+                                          'params': {'lr':           1e-3,
+                                                     'weight_decay': 1e-5}},
+                               loss=torch.nn.MSELoss(),
+                               )
+    policy_params = {**policy_params, **torch_approx_params}
+
     # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
-    expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
-    states = expert_files["trajectory_data"].T[:, 2:29]
-
-    from mushroom_rl.utils.spaces import Box
-    norm_info = deepcopy(mdp.info)
-    norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
-                                      high=norm_info.observation_space._high[2:29])
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=norm_info)
-
-    normalizer.set_state(dict(mean=states.mean(axis=0),
-                              std=states.std(axis=0),
-                              count=states.shape[1]))
-
-    demonstrations = (dict(states=normalizer(states)))
+    demonstrations = _load_demos_selected_discriminator(mdp.info)
 
     agent = GAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
                  discriminator_params=discriminator_params, critic_params=critic_params,
@@ -273,13 +268,31 @@ def _create_vail_agent(mdp, **kwargs):
                       quiet=True
                       )
 
+    # TorchApproximator parameters (used for behaviour cloning)
+    torch_approx_params = dict(batch_size=128,
+                               optimizer={'class':  optim.Adam,
+                                          'params': {'lr':           1e-3,
+                                                     'weight_decay': 1e-5}},
+                               loss=torch.nn.MSELoss(),
+                               )
+    policy_params = {**policy_params, **torch_approx_params}
 
+    # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
+    demonstrations = _load_demos_selected_discriminator(mdp.info)
+
+    agent = VAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
+                 discriminator_params=discriminator_params, critic_params=critic_params,
+                 demonstrations=demonstrations, **alg_params)
+    return agent
+
+
+def _load_demos_selected_discriminator(mdp_info):
     # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
     expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
     states = expert_files["trajectory_data"].T[:, 2:29]
 
     from mushroom_rl.utils.spaces import Box
-    norm_info = deepcopy(mdp.info)
+    norm_info = deepcopy(mdp_info)
     norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
                                       high=norm_info.observation_space._high[2:29])
     normalizer = NormalizationBoxedPreprocessor(mdp_info=norm_info)
@@ -288,12 +301,20 @@ def _create_vail_agent(mdp, **kwargs):
                               std=states.std(axis=0),
                               count=states.shape[1]))
 
-    demonstrations = (dict(states=normalizer(states)))
+    demonstrations = dict(states=normalizer(states))
+    return demonstrations
 
-    agent = VAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
-                 discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=demonstrations, **alg_params)
-    return agent
+
+def init_policy_with_bc(agent):
+    # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
+    expert_files = np.load("expert_data/expert_dataset_humanoid_muscles.npz")
+    states = expert_files["obs"]
+    actions = expert_files["actions"]
+
+    # initialize policy mu network through behaviour cloning
+    agent.policy._mu.fit(states, actions,
+                         n_epochs=100, patience=10,
+                         dropout=True)
 
 
 def _create_env():
@@ -301,12 +322,19 @@ def _create_env():
     mdp_params = dict(gamma=0.99, horizon=2000, nmidsteps=10,
                       goal_reward="trajectory",
                       goal_reward_params=dict(use_error_terminate=True),
-                      use_muscles=False,
+                      use_muscles=True,
                       obs_avg_window=1, act_avg_window=1)
     return mdp_class, mdp_params
 
 
-def experiment(algorithm):
+def evaluate_dataset(dataset, mdp_info):
+    J_mean = np.mean(compute_J(dataset, mdp_info.gamma))
+    R_mean = np.mean(compute_J(dataset))
+    ep_len = np.mean(episodes_length(dataset))
+    return J_mean, R_mean, ep_len
+
+
+def experiment(algorithm, init_bc=False):
     from _wrapping_envs.PlottingEnv import PlottingEnv
     mdp_class, mdp_params = _create_env()
     mdp = PlottingEnv(env_class=mdp_class, env_kwargs=mdp_params)
@@ -327,36 +355,42 @@ def experiment(algorithm):
 
     # evaluate untrained policy
     dataset = core.evaluate(n_episodes=10)
-    J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    ep_len = np.mean(episodes_length(dataset))
-    print('Before Gail ->  J: {},  Len_ep: {},  Entropy: {}'.format(J_mean, ep_len, agent.policy.entropy()))
+    print('Before Gail ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+          .format(*evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
+
+    if init_bc:
+        # initialize policy with bc
+        init_policy_with_bc(agent)
+        dataset = core.evaluate(n_episodes=10)
+        print('After BC ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+              .format(*evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
 
     epoch_js = []
     # gail train loop
     for it in range(100):
-        agent._env_reward_frac = np.exp(-it/3)
-        core.learn(n_steps=10241, n_steps_per_fit=2048, render=False)
-        dataset = core.evaluate(n_episodes=5, render=False)
+        core.learn(n_steps=20481, n_steps_per_fit=2048, render=False)
+        dataset = core.evaluate(n_episodes=10, render=False)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
+        R_mean = np.mean(compute_J(dataset))
         ep_len = np.mean(episodes_length(dataset))
+        print('Epoch: {}  ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+              .format(str(it), J_mean,R_mean, ep_len,agent.policy.entropy()))
         epoch_js.append(J_mean)
-        print('Epoch: {}  ->  J: {},  Len_ep: {},  Entropy: {}'.format(str(it), J_mean, ep_len, agent.policy.entropy()))
 
 
     print("--- The train has finished ---")
     import matplotlib.pyplot as plt
     plt.plot(epoch_js)
     plt.show()
-
     input()
 
     # evaluate trained policy
-    dataset = core.evaluate(n_episodes=10)
-    J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    print('After Gail -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
+    dataset = core.evaluate(n_episodes=25)
+    print('After Gail ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+          .format(*evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
 
 
 if __name__ == "__main__":
-    # not working yet
+    # not tested yet(training but no results so far)
     algorithm = ["GAIL", "VAIL"]
-    experiment(algorithm=algorithm[1])
+    experiment(algorithm=algorithm[0], init_bc=True)
