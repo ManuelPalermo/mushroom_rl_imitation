@@ -6,8 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from ImitationLearning.vail import VAIL
-from ImitationLearning.gail import GAIL
+from ImitationLearning import GAIL, VAIL
 
 from mushroom_rl.environments.mujoco_envs import HumanoidGait
 from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
