@@ -366,7 +366,7 @@ def experiment(algorithm, init_bc=False):
 
     epoch_js = []
     # gail train loop
-    for it in range(100):
+    for it in range(200):
         core.learn(n_steps=20481, n_steps_per_fit=2048, render=False, quiet=True)
         dataset = core.evaluate(n_episodes=10, render=False, quiet=True)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
