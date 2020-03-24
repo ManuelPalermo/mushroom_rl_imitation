@@ -354,8 +354,8 @@ def experiment(algorithm, init_bc=False):
 
     # evaluate untrained policy
     dataset = core.evaluate(n_episodes=10)
-    print('Before Gail ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
-          .format(*evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
+    print('Before {} ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+          .format(algorithm, *evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
 
     if init_bc:
         # initialize policy with bc
@@ -385,8 +385,8 @@ def experiment(algorithm, init_bc=False):
 
     # evaluate trained policy
     dataset = core.evaluate(n_episodes=25)
-    print('After Gail ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
-          .format(*evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
+    print('After {} ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
+          .format(algorithm, *evaluate_dataset(dataset, mdp.info), agent.policy.entropy()))
 
 
 if __name__ == "__main__":

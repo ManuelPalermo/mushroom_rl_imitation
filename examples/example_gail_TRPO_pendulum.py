@@ -95,7 +95,7 @@ class DiscriminatorNetwork(nn.Module):
         return out
 
 
-def _create_gail_agent(mdp, disc_only_state=False, **kwargs):
+def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     use_cuda = False    # torch.cuda.is_available()
 
     mdp_info = deepcopy(mdp.info)
@@ -171,19 +171,13 @@ def _create_gail_agent(mdp, disc_only_state=False, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = expert_files["obs"][:200*10]
-    outputs = expert_files["actions"][:200*10]
-    demonstrations = dict(states=inputs, actions=outputs)
-
     agent = GAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
                  discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=demonstrations, **alg_params)
+                 demonstrations=expert_data, **alg_params)
     return agent
 
 
-def _create_vail_agent(mdp, disc_only_state=False, **kwargs):
+def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     use_cuda = False    # torch.cuda.is_available()
 
     mdp_info = deepcopy(mdp.info)
@@ -265,43 +259,50 @@ def _create_vail_agent(mdp, disc_only_state=False, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = expert_files["obs"][:200*10]
-    outputs = expert_files["actions"][:200*10]
-    demonstrations = (dict(states=inputs, actions=outputs))
-
     agent = VAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
                  discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=demonstrations, **alg_params)
+                 demonstrations=expert_data, **alg_params)
     return agent
 
 
-def init_policy_with_bc(agent, normalizer=None):
+def prepare_expert_data(data_path, n_samples, normalizer=None):
     if normalizer is None:
         normalizer = lambda x: x
 
     # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = normalizer(expert_files["obs"])[:200*10]
-    outputs = expert_files["actions"][:200*10]
+    expert_files = np.load(data_path)
+    inputs = normalizer(expert_files["obs"])[:int(n_samples)]
+    outputs = expert_files["actions"][:int(n_samples)]
+    return dict(states=inputs, actions=outputs)
 
+
+def init_policy_with_bc(agent, expert_data):
     # initialize policy mu network through behaviour cloning
-    agent.policy._mu.fit(inputs, outputs, n_epochs=100, patience=10)
+    agent.policy._mu.fit(expert_data["states"], expert_data["actions"],
+                         n_epochs=100, patience=10)
 
 
 def experiment(algorithm, init_bc=False, discr_only_state=False):
     from _wrapping_envs.PlottingEnv import PlottingEnv
+    horizon = 200
     mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
-                                                     horizon=200, gamma=0.99))
+                                                     horizon=horizon, gamma=0.99))
+
+    # prepare expert samples
+    n_trajectories = 6
+    expert_data = prepare_expert_data(
+            data_path="expert_data/expert_dataset_pendulum_SAC_120.npz",
+            n_samples=horizon*n_trajectories, normalizer=None,
+    )
 
     if algorithm == "GAIL":
-        agent = _create_gail_agent(mdp, discr_only_state)
+        agent = _create_gail_agent(mdp, expert_data, discr_only_state)
     elif algorithm == "VAIL":
         # train new agent with gail, following expert trajectories
-        agent = _create_vail_agent(mdp, discr_only_state)
+        agent = _create_vail_agent(mdp, expert_data, discr_only_state)
     else:
         raise NotImplementedError
+
     # normalization callback
     normalizer = NormalizationBoxedPreprocessor(mdp_info=mdp.info)
 
@@ -312,10 +313,10 @@ def experiment(algorithm, init_bc=False, discr_only_state=False):
     # evaluate untrained policy
     dataset = core.evaluate(n_episodes=10)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    print('Before Gail -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
+    print('Before {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
 
     if init_bc:
-        init_policy_with_bc(agent, normalizer=normalizer)
+        init_policy_with_bc(agent, expert_data=expert_data)
         # evaluate untrained policy
         dataset = core.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
@@ -336,13 +337,12 @@ def experiment(algorithm, init_bc=False, discr_only_state=False):
     import matplotlib.pyplot as plt
     plt.plot(epoch_js)
     plt.show()
-
     input()
 
     # evaluate trained policy
     dataset = core.evaluate(n_episodes=25)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    print('After Gail -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
+    print('After {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
 
 
 if __name__ == "__main__":
