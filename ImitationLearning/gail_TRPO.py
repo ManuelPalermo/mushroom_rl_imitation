@@ -55,10 +55,10 @@ class GAIL(TRPO):
             act_mask = []
 
         self._state_mask = np.arange(demonstrations["states"].shape[1]) \
-            if state_mask is None else state_mask
+            if state_mask is None else np.array(state_mask, dtype=np.int64)
 
         self._act_mask = np.arange(demonstrations["actions"].shape[1]) \
-            if act_mask is None else act_mask
+            if act_mask is None else np.array(act_mask, dtype=np.int64)
 
     def load_demonstrations(self, demonstrations):
         self._demonstrations = demonstrations
@@ -118,7 +118,7 @@ class GAIL(TRPO):
         plcy_act = plcy_act[:, self._act_mask]
 
         # get batch of data to discriminate
-        if not self._act_mask:
+        if not self._act_mask.size > 0:
             demo_obs = next(minibatch_generator(plcy_obs.shape[0],
                                                 self._demonstrations["states"]))[0]
             inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
