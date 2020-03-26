@@ -1,4 +1,3 @@
-
 from copy import deepcopy
 
 import numpy as np
@@ -6,16 +5,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from mushroom_rl.utils.callbacks import PlotDataset
 
-from ImitationLearning.vail import VAIL
-from mushroom_rl.utils.preprocessors import NormalizationPreprocessor
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
-from mushroom_rl.environments import Gym, Mujoco
+from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
 from ImitationLearning.gail import GAIL
+from ImitationLearning.vail import VAIL
 
 
 class CriticNetwork(nn.Module):
@@ -102,25 +102,25 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     mdp_info = deepcopy(mdp.info)
 
     # Settings
-    network_layers_actor = (256, 128)
-    network_layers_critic = (256, 128)
-    network_layers_discriminator = (256, 128)
+    network_layers_actor = (128, 64)
+    network_layers_critic = (128, 64)
+    network_layers_discriminator = (128, 64)
 
-    lr_actor = 2e-4
-    lr_critic = 2e-4
-    lr_discriminator = 2e-4
+    lr_actor = 3e-4
+    lr_critic = 3e-4
+    lr_discriminator = 3e-4
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
     weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
-    batch_size_policy = 256                # 64
+    batch_size_policy = 128                # 64
     clip_eps_ppo = .2
     gae_lambda = .95
-    policy_std_0 = 0.5
+    policy_std_0 = 0.3
 
-    batch_size_discriminator = 256
+    batch_size_discriminator = 128
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -185,34 +185,34 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     return agent
 
 
-def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
+def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples=1e32, **kwargs):
     use_cuda = False    # torch.cuda.is_available()
 
     mdp_info = deepcopy(mdp.info)
 
     # Settings
-    network_layers_actor = (256, 128)
-    network_layers_critic = (256, 128)
-    network_layers_discriminator = 256
+    network_layers_actor = (128, 64)
+    network_layers_critic = (128, 64)
+    network_layers_discriminator = 128
 
-    lr_actor = 2e-4
-    lr_critic = 2e-4
-    lr_discriminator = 2e-4
+    lr_actor = 3e-4
+    lr_critic = 3e-4
+    lr_discriminator = 3e-4
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
     weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
-    batch_size_policy = 256
+    batch_size_policy = 128
     clip_eps_ppo = .2
     gae_lambda = .95
-    policy_std_0 = 0.5
+    policy_std_0 = 0.3
 
-    d_noise_vector_size = 16
-    batch_size_discriminator = 256
+    d_noise_vector_size = 8
+    batch_size_discriminator = 128
     info_constraint = 0.5
-    lr_beta = 2e-5
+    lr_beta = 3e-5
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -266,7 +266,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
-    torch_approx_params = dict(batch_size=256,
+    torch_approx_params = dict(batch_size=128,
                                optimizer={'class':  optim.Adam,
                                           'params': {'lr':           1e-3,
                                                      'weight_decay': 1e-5}},
@@ -285,11 +285,7 @@ def prepare_expert_data(data_path, n_samples, normalizer=None):
         normalizer = lambda x: x
 
     # load expert training data
-    try:
-        expert_files = np.load(data_path)
-    except:
-        raise FileNotFoundError("Specified expert data was not found, try downloading expert data from: "
-                                "\nhttps://drive.google.com/drive/folders/1h3H4AY_ZBx08hz-Ct0Nxxus-V1melu1U")
+    expert_files = np.load(data_path)
     inputs = normalizer(expert_files["obs"])[:int(n_samples)]
     outputs = expert_files["actions"][:int(n_samples)]
     return dict(states=inputs, actions=outputs)
@@ -298,21 +294,18 @@ def prepare_expert_data(data_path, n_samples, normalizer=None):
 def init_policy_with_bc(agent, expert_data):
     # initialize policy mu network through behaviour cloning
     agent.policy._mu.fit(expert_data["states"], expert_data["actions"],
-                         n_epochs=5, patience=10)
+                         n_epochs=100, patience=10)
 
 
-def experiment(algorithm, env_kwargs,
-               expert_data_path, n_expert_trajectories,
-               init_bc=False, discr_only_state=False):
-    from _wrapping_envs.PlottingEnv import PlottingEnv
-    mdp = PlottingEnv(env_class=Gym, env_kwargs=env_kwargs)
+def experiment(algorithm, init_bc=False, discr_only_state=False):
+    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
     horizon = mdp.info.horizon
 
     # prepare expert samples
+    n_trajectories = 10
     expert_data = prepare_expert_data(
-            data_path=expert_data_path,
-            n_samples=horizon*n_expert_trajectories,
-            normalizer=None,
+            data_path="expert_data/expert_dataset_pendulum_SAC_120.npz",
+            n_samples=horizon*n_trajectories, normalizer=None,
     )
 
     if algorithm == "GAIL":
@@ -322,23 +315,25 @@ def experiment(algorithm, env_kwargs,
         agent = _create_vail_agent(mdp, expert_data, discr_only_state)
     else:
         raise NotImplementedError
+
     # normalization callback
-    normalizer = NormalizationPreprocessor(mdp_info=mdp.info)
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
+
+    # dataset plotter callback
+    plotter = PlotDataset(mdp.info, obs_normalized=True)
 
     # Algorithm(with normalizing and plotting)
-    core = Core(agent, mdp) #, preprocessors=[normalizer])
-    #core = Core(agent, mdp)    # without normalization
+    core = Core(agent, mdp, callback_step=plotter, preprocessors=[normalizer])
 
     # evaluate untrained policy
-    dataset = core.evaluate(n_episodes=20)
+    dataset = core.evaluate(n_episodes=10)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
     print('Before {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
 
     if init_bc:
-        init_policy_with_bc(agent, expert_data)
-        core.reset()
+        init_policy_with_bc(agent, expert_data=expert_data)
         # evaluate untrained policy
-        dataset = core.evaluate(n_episodes=20)
+        dataset = core.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
         print('After BC -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
 
@@ -360,25 +355,11 @@ def experiment(algorithm, env_kwargs,
     input()
 
     # evaluate trained policy
-    dataset = core.evaluate(n_episodes=20)
+    dataset = core.evaluate(n_episodes=25)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
     print('After {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
 
 
 if __name__ == "__main__":
-    # algorithm to use(only gail and vail available)
-    algorithm = ["GAIL", "VAIL"][0]
-
-    # gym environment to use(only examples here, id can be any gym env,
-    # as long as demonstrations are available for it)
-    # make sure expert_dataset is a .npz with (obs.py and actions.npy) inside
-    env_id = ['Hopper-v2', 'HalfCheetah-v2', 'Walker2d-v2', 'Humanoid-v2'][2]
-
-    env_kwargs = dict(name=env_id, horizon=500, gamma=0.99)
-    expert_data_path = "expert_data/expert_dataset_{}.npz".format(env_id)
-    n_expert_trajectories = 1
-
-    experiment(algorithm=algorithm, env_kwargs=env_kwargs,
-               expert_data_path=expert_data_path,
-               n_expert_trajectories=n_expert_trajectories,
-               init_bc=True, discr_only_state=True)
+    algorithm = ["GAIL", "VAIL"]
+    experiment(algorithm=algorithm[1], init_bc=True, discr_only_state=True)

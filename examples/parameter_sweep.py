@@ -8,9 +8,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from mushroom_rl.utils.callbacks import PlotDataset
 from tqdm import tqdm, trange
 
-from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
 from mushroom_rl.environments import Gym
@@ -291,35 +292,27 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
 
     print("\n------------------------ EXPERIENCE {} ---------------------------".format(exp_id))
 
-    if use_plot:
-        from _wrapping_envs.PlottingEnv import PlottingEnv
-        mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
-                                                         horizon=200, gamma=0.99))
-    else:
-        mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
-
+    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
 
     if traj_id == 0:
         traj_path = "examples/expert_data/expert_dataset_pendulum_v0.npz"
         preprocessors = [lambda x:x]
     elif traj_id == 1:
         traj_path = "examples/expert_data/expert_dataset_pendulum_SAC_120.npz"
-        preprocessors = [NormalizationBoxedPreprocessor(mdp_info=mdp.info)]
+        preprocessors = [MinMaxPreprocessor(mdp_info=mdp.info)]
     else:
         raise NotImplementedError
-
 
     experience_js = []
     experience_js.append([(-35 if traj_id == 0 else -120)
                           for _ in range(n_epochs)])
-
 
     # create dummy policy to train with behaviour cloning as baseline
     agent_bc = _create_gail_agent(mdp, expert_files_path=traj_path,
                                   disc_only_state=disc_only_state)
 
     # behaviour cloning baseline
-    init_policy_with_bc(agent_bc, normalizer=preprocessors[0])
+    init_policy_with_bc(agent_bc, normalizer=None)
     bc_core = Core(agent_bc, mdp, preprocessors=preprocessors)
 
     # evaluate bc trained policy
@@ -341,20 +334,26 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
 
         if behaviour_clone_start:
             # train policy mu network through behaviour cloning
-            init_policy_with_bc(agent_bc, normalizer=preprocessors[0])
+            init_policy_with_bc(agent_bc, normalizer=None)
             dataset = bc_core.evaluate(n_episodes=10)
             J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
             print('After BC -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
 
         # gail train loop
+
+
+        if use_plot:
+            plotter = PlotDataset(mdp.info, obs_normalized=True)
+            core = Core(agent_bc, mdp, callback_step=plotter, preprocessors=preprocessors)
+        else:
+            core = Core(agent_bc, mdp, preprocessors=preprocessors)
+
         epoch_js = []
-        core = Core(agent, mdp, preprocessors=preprocessors)
         for it in range(n_epochs):
             core.learn(n_steps=10241, n_steps_per_fit=1024, render=False, quiet=True)
             dataset = core.evaluate(n_episodes=20, render=False)
             J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
             epoch_js.append(J_mean)
-
         experience_js.append(epoch_js)
 
         # evaluate trained policy

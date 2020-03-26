@@ -9,7 +9,7 @@ import torch.optim as optim
 from ImitationLearning import GAIL, VAIL
 
 from mushroom_rl.environments.mujoco_envs import HumanoidGait
-from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 from mushroom_rl.utils.callbacks.plot_dataset import PlotDataset
 
 from mushroom_rl.policy import GaussianTorchPolicy
@@ -290,17 +290,19 @@ def _load_demos_selected_discriminator(mdp_info):
     expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
     states = expert_files["trajectory_data"].T[:, 2:29]
 
-    from mushroom_rl.utils.spaces import Box
-    norm_info = deepcopy(mdp_info)
-    norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
-                                      high=norm_info.observation_space._high[2:29])
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=norm_info)
+    # no need to normalize
+    #from mushroom_rl.utils.spaces import Box
+    #norm_info = deepcopy(mdp_info)
+    #norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
+    #                                  high=norm_info.observation_space._high[2:29])
+    #normalizer = MinMaxPreprocessor(mdp_info=norm_info)
 
-    normalizer.set_state(dict(mean=states.mean(axis=0),
-                              std=states.std(axis=0),
-                              count=states.shape[1]))
+    #normalizer.set_state(dict(mean=states.mean(axis=0),
+    #                          std=states.std(axis=0),
+    #                          count=states.shape[1]))
+    #demonstrations = dict(states=normalizer(states))
 
-    demonstrations = dict(states=normalizer(states))
+    demonstrations = dict(states=states)
     return demonstrations
 
 
@@ -334,9 +336,8 @@ def evaluate_dataset(dataset, mdp_info):
 
 
 def experiment(algorithm, init_bc=False):
-    from _wrapping_envs.PlottingEnv import PlottingEnv
     mdp_class, mdp_params = _create_env()
-    mdp = PlottingEnv(env_class=mdp_class, env_kwargs=mdp_params)
+    mdp = mdp_class(**mdp_params)
 
     if algorithm == "GAIL":
         agent = _create_gail_agent(mdp)
@@ -346,11 +347,16 @@ def experiment(algorithm, init_bc=False):
     else:
         raise NotImplementedError
     # normalization callback
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=mdp.info)
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
+
+    # normalization callback
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
+
+    # dataset plotter callback
+    plotter = PlotDataset(mdp.info, obs_normalized=True)
 
     # Algorithm(with normalizing and plotting)
-    core = Core(agent, mdp, preprocessors=[normalizer])
-    #core = Core(agent, mdp)    # without normalization
+    core = Core(agent, mdp, callback_step=plotter, preprocessors=[normalizer])
 
     # evaluate untrained policy
     dataset = core.evaluate(n_episodes=10)

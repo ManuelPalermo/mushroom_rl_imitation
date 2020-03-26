@@ -7,7 +7,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from mushroom_rl.policy import GaussianTorchPolicy
-from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
+from mushroom_rl.utils.callbacks import PlotDataset
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 
 from mushroom_rl.algorithms.actor_critic import PPO
 from mushroom_rl.environments import Gym
@@ -106,28 +107,31 @@ def _create_ppo_agent(mdp):
 
 
 
-def experiment(use_plot=False):
-    if use_plot:
-        from _wrapping_envs.PlottingEnv import PlottingEnv
-        mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
-                                                         horizon=200, gamma=0.99))
-    else:
-        mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
-
-    norm_preprocessor = NormalizationBoxedPreprocessor(mdp_info=mdp.info)
+def experiment():
+    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
     agent = _create_ppo_agent(mdp)
 
-    # Algorithm
-    core = Core(agent, mdp, preprocessors=[norm_preprocessor])
+    # normalization callback
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
 
+    # dataset ploter callback
+    plotter = PlotDataset(mdp.info, obs_normalized=True)
+
+    # Algorithm(with normalizing and plotting)
+    core = Core(agent, mdp,
+                callback_step=plotter,
+                preprocessors=[normalizer])
+
+    # test before BC
     dataset = core.evaluate(n_episodes=25, render=False)
     R_mean = np.mean(compute_J(dataset))
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
     print('Before BC -> J: {}, R: {}'.format(J_mean, R_mean))
 
+    # test after BC
     # load expert training data
     expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = norm_preprocessor(expert_files["obs"])
+    inputs = expert_files["obs"]
     outputs = expert_files["actions"]
 
     # train policy mu network through behaviour cloning
@@ -139,4 +143,4 @@ def experiment(use_plot=False):
     print('After BC -> J: {}, R: {}'.format(J_mean, R_mean))
 
 
-experiment(use_plot=True)
+experiment()

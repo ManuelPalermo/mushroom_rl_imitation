@@ -5,8 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from mushroom_rl.utils.callbacks import PlotDataset
 
-from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
 from mushroom_rl.environments import Gym
@@ -283,10 +284,8 @@ def init_policy_with_bc(agent, expert_data):
 
 
 def experiment(algorithm, init_bc=False, discr_only_state=False):
-    from _wrapping_envs.PlottingEnv import PlottingEnv
-    horizon = 200
-    mdp = PlottingEnv(env_class=Gym, env_kwargs=dict(name='Pendulum-v0',
-                                                     horizon=horizon, gamma=0.99))
+    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
+    horizon = mdp.info.horizon
 
     # prepare expert samples
     n_trajectories = 6
@@ -304,11 +303,13 @@ def experiment(algorithm, init_bc=False, discr_only_state=False):
         raise NotImplementedError
 
     # normalization callback
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=mdp.info)
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
+
+    # dataset plotter callback
+    plotter = PlotDataset(mdp.info, obs_normalized=True)
 
     # Algorithm(with normalizing and plotting)
-    core = Core(agent, mdp, preprocessors=[normalizer])
-    #core = Core(agent, mdp)    # without normalization
+    core = Core(agent, mdp, callback_step=plotter, preprocessors=[normalizer])
 
     # evaluate untrained policy
     dataset = core.evaluate(n_episodes=10)
