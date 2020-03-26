@@ -1,7 +1,7 @@
 # Imitation_Learning
-Imitation Learning Algorithms based on DeepRL library [mushroom_rl](https://github.com/MushroomRL/mushroom-rl)
+Imitation Learning Algorithms (and IRL) based on DeepRL library [mushroom_rl](https://github.com/MushroomRL/mushroom-rl)
 
-
-- Library and algorithms are still under development and testing!
-- Implemented algorithms: GAIL, VAIL.
-- Implemented examples on pendulum(appears to work) and humanoid(not working yet - problem might be to complex to apply directly)
+- Implemented Algorithms: GAIL, VAIL. Both with PPO or TRPO policy update versions.
+- Option for easy states/actions selection for descriminator.
+- Algorithms are still being benchmarked in multiple environemnts.
+- There are multiple examples available.
