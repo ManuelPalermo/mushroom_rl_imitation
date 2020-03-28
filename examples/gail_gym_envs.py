@@ -102,20 +102,20 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     mdp_info = deepcopy(mdp.info)
 
     # Settings
-    network_layers_actor = (256, 128)
-    network_layers_critic = (256, 128)
-    network_layers_discriminator = (256, 128)
+    network_layers_actor = (128, 64)
+    network_layers_critic = (128, 128)
+    network_layers_discriminator = (128, 64)
 
-    lr_actor = 2e-4
-    lr_critic = 2e-4
-    lr_discriminator = 2e-4
+    lr_actor = 1e-3
+    lr_critic = 1e-3
+    lr_discriminator = 1e-3
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 0.0
+    weight_decay_discriminator = 1e-5
 
     n_epochs_policy = 3
-    batch_size_policy = 256                # 64
+    batch_size_policy = 256
     clip_eps_ppo = .2
     gae_lambda = .95
     policy_std_0 = 0.5
@@ -171,7 +171,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
 
 
     # TorchApproximator parameters (used for behaviour cloning)
-    torch_approx_params = dict(batch_size=128,
+    torch_approx_params = dict(batch_size=256,
                                optimizer={'class':  optim.Adam,
                                           'params': {'lr':           1e-3,
                                                      'weight_decay': 1e-5}},
@@ -191,17 +191,17 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     mdp_info = deepcopy(mdp.info)
 
     # Settings
-    network_layers_actor = (256, 128)
-    network_layers_critic = (256, 128)
-    network_layers_discriminator = 256
+    network_layers_actor = (128, 64)
+    network_layers_critic = (128, 64)
+    network_layers_discriminator = 128
 
-    lr_actor = 2e-4
-    lr_critic = 2e-4
-    lr_discriminator = 2e-4
+    lr_actor = 1e-3
+    lr_critic = 1e-3
+    lr_discriminator = 1e-3
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 0.0
+    weight_decay_discriminator = 1e-5
 
     n_epochs_policy = 3
     batch_size_policy = 256
@@ -212,7 +212,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     d_noise_vector_size = 16
     batch_size_discriminator = 256
     info_constraint = 0.5
-    lr_beta = 2e-5
+    lr_beta = 1e-4
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -280,48 +280,38 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     return agent
 
 
-def prepare_expert_data(data_path, n_samples, normalizer=None):
-    if normalizer is None:
-        normalizer = lambda x: x
+def prepare_expert_data(data_path, n_samples, data_normalizer=None):
+    if data_normalizer is None:
+        data_normalizer = lambda x: x
 
     # load expert training data
-    try:
-        expert_files = np.load(data_path)
-    except:
-        raise FileNotFoundError("Specified expert data was not found, try downloading expert data from: "
-                                "\nhttps://drive.google.com/drive/folders/1h3H4AY_ZBx08hz-Ct0Nxxus-V1melu1U")
-
-    inputs = normalizer(expert_files["obs"])[:int(n_samples)]
+    expert_files = np.load(data_path)
+    inputs = data_normalizer(expert_files["obs"])[:int(n_samples)]
     outputs = expert_files["actions"][:int(n_samples)]
     return dict(states=inputs, actions=outputs)
+
+def warmup_running_norm(normalizer, expert_data):
+    #for d in expert_data["states"].copy():
+    #    normalizer(d)
+    # produces same results as above, but less readable(but can set num samples -> increase initial catcup rate)
+    n = 25  # low n value so it has high catchup to actual statistics
+    normalizer.set_state(dict(mean=np.mean(expert_data["states"], axis=0),
+                              std=n * (np.std(expert_data["states"], axis=0)**2),
+                              count=n))
 
 
 def init_policy_with_bc(agent, expert_data):
     # initialize policy mu network through behaviour cloning
     agent.policy._mu.fit(expert_data["states"], expert_data["actions"],
-                         n_epochs=5, patience=10)
+                         n_epochs=50, patience=10)
 
 
-def experiment(algorithm, env_kwargs,
-               expert_data_path, n_expert_trajectories,
+def experiment(algorithm, env_kwargs, n_expert_trajectories,
                init_bc=False, discr_only_state=False):
+
     mdp = Gym(**env_kwargs)
     horizon = mdp.info.horizon
-
-    # prepare expert samples
-    expert_data = prepare_expert_data(
-            data_path=expert_data_path,
-            n_samples=horizon*n_expert_trajectories,
-            normalizer=None,
-    )
-
-    if algorithm == "GAIL":
-        agent = _create_gail_agent(mdp, expert_data, discr_only_state)
-    elif algorithm == "VAIL":
-        # train new agent with gail, following expert trajectories
-        agent = _create_vail_agent(mdp, expert_data, discr_only_state)
-    else:
-        raise NotImplementedError
+    expert_data_path = "expert_data/expert_dataset_{}.npz".format(env_id)
 
     # normalization callback(try to use limited range if mdp
     # observation limits are available)
@@ -333,60 +323,76 @@ def experiment(algorithm, env_kwargs,
     # plotting callback
     plotter = PlotDataset(mdp.info, obs_normalized=True)
 
-    # Algorithm(with normalizing and plotting)
-    core = Core(agent, mdp, callback_step=plotter, preprocessors=[])
+    expert_data = prepare_expert_data(
+            data_path=expert_data_path,
+            n_samples=horizon*n_expert_trajectories,
+            data_normalizer=None,
+    )
+    #warmup_running_norm(normalizer=normalizer, expert_data=expert_data)
+
+    if algorithm == "GAIL":
+        agent = _create_gail_agent(mdp, expert_data, discr_only_state)
+    elif algorithm == "VAIL":
+        # train new agent with gail, following expert trajectories
+        agent = _create_vail_agent(mdp, expert_data, discr_only_state)
+    else:
+        raise NotImplementedError
 
     # evaluate untrained policy
+    # Algorithm(with normalizing and plotting)
+    core = Core(agent, mdp, callback_step=plotter, preprocessors=[normalizer])
     dataset = core.evaluate(n_episodes=20)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    print('Before {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
+    R_mean = np.mean(compute_J(dataset))
+    print('Before {} -> R: {},  J: {},  Entropy: {}'.format(algorithm, R_mean, J_mean, agent.policy.entropy()))
 
     if init_bc:
         init_policy_with_bc(agent, expert_data)
-        # evaluate untrained policy
+        # evaluate and show untrained policy
+        core.evaluate(n_episodes=2, render=True)
         dataset = core.evaluate(n_episodes=20)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-        print('After BC -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
+        R_mean = np.mean(compute_J(dataset))
+        print('After BC -> R: {},  J: {},  Entropy: {}'.format(R_mean, J_mean, agent.policy.entropy()))
 
 
     epoch_js = []
     # gail train loop
-    for it in range(100):
-        core.learn(n_steps=10000, n_steps_per_fit=1024, render=False)
-        dataset = core.evaluate(n_episodes=10, render=False)
+    for it in range(50):
+        core.learn(n_steps=10000, n_steps_per_fit=1024)
+        dataset = core.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
+        R_mean = np.mean(compute_J(dataset))
+        print('Epoch: {}  ->  R: {},  J: {},  Entropy: {}'.format(it, R_mean, J_mean, agent.policy.entropy()))
         epoch_js.append(J_mean)
-        print('Epoch: {}  ->  J: {}, Entropy: {}'.format(str(it), J_mean, agent.policy.entropy()))
-
 
     print("--- The train has finished ---")
     import matplotlib.pyplot as plt
     plt.plot(epoch_js)
     plt.show()
-    input()
+    plt.title("Train J -> env_id: {},  algorithm: {}".format(env_id, algorithm))
+    input("Press any key to visualize trained policy")
 
-    # evaluate trained policy
+    # evaluate and show trained policy
+    core.evaluate(n_episodes=2, render=True)
     dataset = core.evaluate(n_episodes=20)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-    print('After {} -> J: {}, Entropy: {}'.format(algorithm, J_mean, agent.policy.entropy()))
+    R_mean = np.mean(compute_J(dataset))
+    print('After {} ->  R: {},  J: {},  Entropy: {}'.format(algorithm, R_mean, J_mean, agent.policy.entropy()))
 
 
 if __name__ == "__main__":
-    # algorithm to use(only gail and vail available)
+    # algorithm to use(only GAIL and VAIL available)
     algorithm = ["GAIL", "VAIL"][0]
 
-    # gym environment to use(only examples here, id can be any gym env,
-    # as long as demonstrations are available for it)
-    # check out extract_expert_trajectories.py to see how to extract examples
-    # or download some from: https://drive.google.com/drive/folders/1h3H4AY_ZBx08hz-Ct0Nxxus-V1melu1U
-    # make sure expert_dataset is a .npz with (obs.py and actions.npy) inside
-    env_id = ['Hopper-v2', 'HalfCheetah-v2', 'Walker2d-v2', 'Humanoid-v2'][0]
-
-    env_kwargs = dict(name=env_id, horizon=500, gamma=0.99)
-    expert_data_path = "expert_data/expert_dataset_{}.npz".format(env_id)
-    n_expert_trajectories = 1
+    # gym environment to use(env_id can be any gym env, as long
+    # as demonstrations are available for it)
+    # check out extract_expert_trajectories.py to see how to extract
+    # expert trajectories.
+    env_id = 'Hopper-v2'
+    env_kwargs = dict(name=env_id, horizon=1000, gamma=0.99)
+    n_expert_trajectories = 25
 
     experiment(algorithm=algorithm, env_kwargs=env_kwargs,
-               expert_data_path=expert_data_path,
                n_expert_trajectories=n_expert_trajectories,
-               init_bc=True, discr_only_state=True)
+               init_bc=True, discr_only_state=False)

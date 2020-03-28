@@ -130,7 +130,7 @@ def experiment():
 
     # test after BC
     # load expert training data
-    expert_files = np.load("expert_data/expert_dataset_pendulum_SAC_120.npz")
+    expert_files = np.load("expert_data/expert_dataset_Pendulum-v0.npz")
     inputs = expert_files["obs"]
     outputs = expert_files["actions"]
 

@@ -73,7 +73,7 @@ class DiscriminatorNetwork(nn.Module):
         return out
 
 
-def _create_vail_agent(mdp, disc_only_state, **kwargs):
+def _create_vail_agent(mdp, expert_data, disc_only_state, **kwargs):
     use_cuda = False    # torch.cuda.is_available()
 
     mdp_info = deepcopy(mdp.info)
@@ -103,7 +103,7 @@ def _create_vail_agent(mdp, disc_only_state, **kwargs):
     lr_beta = 3e-5
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
-    discrim_act_mask = []  # np.arange(mdp_info.action_space.shape[0])
+    discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
     discrim_input_shape = (len(discrim_obs_mask) + len(discrim_act_mask),)
 
     policy_params = dict(network=ActorNetwork,
@@ -162,21 +162,13 @@ def _create_vail_agent(mdp, disc_only_state, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    # load expert training data
-    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = expert_files["obs"][:200*10]
-    outputs = expert_files["actions"][:200*10]
-    demonstrations = (dict(states=inputs, actions=None)
-                      if disc_only_state else
-                      dict(states=inputs, actions=outputs))
-
     agent = VAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
                  discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=demonstrations, **alg_params)
+                 demonstrations=expert_data, **alg_params)
     return agent
 
 
-def _create_gail_agent(mdp, disc_only_state, **kwargs):
+def _create_gail_agent(mdp, expert_data, disc_only_state, **kwargs):
     use_cuda = False    # torch.cuda.is_available()
 
     mdp_info = deepcopy(mdp.info)
@@ -203,7 +195,7 @@ def _create_gail_agent(mdp, disc_only_state, **kwargs):
     batch_size_discriminator = 128
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
-    discrim_act_mask = []  # np.arange(mdp_info.action_space.shape[0])
+    discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
     discrim_input_shape = (len(discrim_obs_mask) + len(discrim_act_mask),)
 
     policy_params = dict(network=ActorNetwork,
@@ -260,60 +252,55 @@ def _create_gail_agent(mdp, disc_only_state, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    # load expert training data
-    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = expert_files["obs"][:200*10]
-    outputs = expert_files["actions"][:200*10]
-    demonstrations = (dict(states=inputs, actions=None)
-                      if disc_only_state else
-                      dict(states=inputs, actions=outputs))
-
     agent = GAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
                  discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=demonstrations, **alg_params)
+                 demonstrations=expert_data, **alg_params)
     return agent
 
 
-def init_policy_with_bc(agent, normalizer=None):
+def prepare_expert_data(data_path, n_samples, normalizer=None):
     if normalizer is None:
         normalizer = lambda x: x
 
     # load expert training data
-    expert_files = np.load("examples/expert_data/expert_dataset_pendulum_SAC_120.npz")
-    inputs = normalizer(expert_files["obs"])[:200*10]
-    outputs = expert_files["actions"][:200*10]
+    expert_files = np.load(data_path)
+    inputs = normalizer(expert_files["obs"])[:int(n_samples)]
+    outputs = expert_files["actions"][:int(n_samples)]
+    return dict(states=inputs, actions=outputs)
 
+
+def init_policy_with_bc(agent, expert_data):
     # initialize policy mu network through behaviour cloning
-    agent.policy._mu.fit(inputs, outputs, n_epochs=100, patience=10)
+    agent.policy._mu.fit(expert_data["states"], expert_data["actions"],
+                         n_epochs=50, patience=10)
 
 
-def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=250,
-               behaviour_clone_start=True, use_plot=False, **kwargs):
-
-    print("\n------------------------ EXPERIENCE {} ---------------------------".format(exp_id))
-
-    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
-
-    if traj_id == 0:
-        traj_path = "examples/expert_data/expert_dataset_pendulum_v0.npz"
-        preprocessors = [lambda x:x]
-    elif traj_id == 1:
-        traj_path = "examples/expert_data/expert_dataset_pendulum_SAC_120.npz"
-        preprocessors = [MinMaxPreprocessor(mdp_info=mdp.info)]
-    else:
-        raise NotImplementedError
+def experiment(exp_id, env_id, agent_id, disc_only_state,
+               horizon=500, n_expert_traj=10, n_trials=3, n_epochs=250,
+               behaviour_clone_start=True, use_plot=False, expert_J=np.nan,
+               **kwargs):
 
     experience_js = []
-    experience_js.append([(-35 if traj_id == 0 else -120)
-                          for _ in range(n_epochs)])
+    # add expert J(not available)
+    experience_js.append([expert_J for _ in range(n_epochs)])
+    print("\n------------------------ EXPERIENCE {} ---------------------------".format(exp_id))
+
+    mdp = Gym(name=env_id, horizon=horizon, gamma=0.99)
+    preprocessor = MinMaxPreprocessor(mdp_info=mdp.info)
+
+    # prepare expert samples
+    expert_data = prepare_expert_data(
+            data_path="expert_data/expert_dataset_{}.npz".format(env_id),
+            n_samples=horizon*n_expert_traj, normalizer=None,
+    )
 
     # create dummy policy to train with behaviour cloning as baseline
-    agent_bc = _create_gail_agent(mdp, expert_files_path=traj_path,
+    agent_bc = _create_gail_agent(mdp, expert_data=expert_data,
                                   disc_only_state=disc_only_state)
 
     # behaviour cloning baseline
-    init_policy_with_bc(agent_bc, normalizer=None)
-    bc_core = Core(agent_bc, mdp, preprocessors=preprocessors)
+    init_policy_with_bc(agent_bc, expert_data=expert_data)
+    bc_core = Core(agent_bc, mdp, preprocessors=[preprocessor])
 
     # evaluate bc trained policy
     dataset_bc = bc_core.evaluate(n_episodes=50)
@@ -326,27 +313,25 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
 
     for trial_i in range(n_trials):
         if agent_id == "gail":
-            agent = _create_gail_agent(mdp, expert_files_path=traj_path, disc_only_state=disc_only_state)
+            agent = _create_gail_agent(mdp, expert_data=expert_data, disc_only_state=disc_only_state)
         elif agent_id == "vail":
-            agent = _create_vail_agent(mdp, expert_files_path=traj_path, disc_only_state=disc_only_state)
+            agent = _create_vail_agent(mdp, expert_data=expert_data, disc_only_state=disc_only_state)
         else:
             raise NotImplementedError
 
         if behaviour_clone_start:
             # train policy mu network through behaviour cloning
-            init_policy_with_bc(agent_bc, normalizer=None)
+            init_policy_with_bc(agent_bc, expert_data=expert_data)
             dataset = bc_core.evaluate(n_episodes=10)
             J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
             print('After BC -> J: {}, Entropy: {}'.format(J_mean, agent.policy.entropy()))
 
         # gail train loop
-
-
         if use_plot:
             plotter = PlotDataset(mdp.info, obs_normalized=True)
-            core = Core(agent_bc, mdp, callback_step=plotter, preprocessors=preprocessors)
+            core = Core(agent_bc, mdp, callback_step=plotter, preprocessors=[preprocessor])
         else:
-            core = Core(agent_bc, mdp, preprocessors=preprocessors)
+            core = Core(agent_bc, mdp, preprocessors=[preprocessor])
 
         epoch_js = []
         for it in range(n_epochs):
@@ -362,7 +347,6 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
         R_mean = np.mean(compute_J(dataset))
         tqdm.write('Agent {} results  ->  J: {},  R: {},  Entropy: {}'
                    .format(trial_i, J_mean, R_mean, core.agent.policy.entropy()))
-
         del agent, core
 
     # plot runs
@@ -374,10 +358,10 @@ def experiment(exp_id, traj_id, agent_id, disc_only_state, n_trials=3, n_epochs=
     plt.plot(experience_js[:, 2:].mean(axis=1), c="b")    # runs average performance
     plt.plot(experience_js[:, 2:], alpha=0.33)            # runs performance
 
-    plt.title("Algorithm: {}, traj_id: {}".format(agent_id, traj_id))
+    plt.title("Algorithm: {}, env_id: {}".format(agent_id, env_id))
     plt.legend(["Expert", "Behav_clone", "Run_mean", *["Run_{}".format(i) for i in range(n_trials)]])
 
-    save_path = "./output/algorithm_{}_traj_id_{}".format(agent_id, traj_id) \
+    save_path = "./output/algorithm_{}_env_id_{}".format(agent_id, env_id) \
                 + ("_state_only_" if disc_only_state else "") \
                 + ("_bc_start" if behaviour_clone_start else "") \
                 + ".png"

@@ -287,10 +287,11 @@ def experiment(algorithm, init_bc=False, discr_only_state=False):
     mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
     horizon = mdp.info.horizon
 
-    # prepare expert samples
-    n_trajectories = 6
+    # prepare expert samples(no need to normalize the data as
+    # a Normalizer was used when extracting it)
+    n_trajectories = 10
     expert_data = prepare_expert_data(
-            data_path="expert_data/expert_dataset_pendulum_SAC_120.npz",
+            data_path="expert_data/expert_dataset_Pendulum-v0.npz",
             n_samples=horizon*n_trajectories, normalizer=None,
     )
 
