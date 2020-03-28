@@ -103,7 +103,7 @@ def _create_gail_agent(mdp, **kwargs):
     # Settings
     network_layers_actor = (512, 256)
     network_layers_critic = (512, 256)
-    network_layers_discriminator = (256, 128)
+    network_layers_discriminator = (512, 256)
 
     lr_actor = 5e-5
     lr_critic = 1e-4
@@ -111,7 +111,7 @@ def _create_gail_agent(mdp, **kwargs):
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 0.0
+    weight_decay_discriminator = 1e-7
 
     n_epochs_policy = 3
     batch_size_policy = 256
@@ -287,22 +287,21 @@ def _create_vail_agent(mdp, **kwargs):
 
 def _load_demos_selected_discriminator(mdp_info):
     # load expert training data -> (select only joints from trajectories to compare(qpos/qvel))
-    expert_files = np.load("expert_data/humanoid_gait_trajectory.npz")
+    expert_files = np.load("expert_data/humanoid_mocap_trajectory.npz")
     states = expert_files["trajectory_data"].T[:, 2:29]
 
-    # no need to normalize
-    #from mushroom_rl.utils.spaces import Box
-    #norm_info = deepcopy(mdp_info)
-    #norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
-    #                                  high=norm_info.observation_space._high[2:29])
-    #normalizer = MinMaxPreprocessor(mdp_info=norm_info)
+    from mushroom_rl.utils.spaces import Box
+    norm_info = deepcopy(mdp_info)
+    norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
+                                      high=norm_info.observation_space._high[2:29])
+    normalizer = MinMaxPreprocessor(mdp_info=norm_info)
 
-    #normalizer.set_state(dict(mean=states.mean(axis=0),
-    #                          std=states.std(axis=0),
-    #                          count=states.shape[1]))
-    #demonstrations = dict(states=normalizer(states))
+    normalizer.set_state(dict(mean=np.mean(states, axis=0),
+                              var=1*(np.std(states, axis=0)**2),
+                              count=1))
 
-    demonstrations = dict(states=states)
+    norm_states = np.array([normalizer(st) for st in states])
+    demonstrations = dict(states=norm_states)
     return demonstrations
 
 
@@ -314,8 +313,7 @@ def init_policy_with_bc(agent):
 
     # initialize policy mu network through behaviour cloning
     agent.policy._mu.fit(states, actions,
-                         n_epochs=100, patience=10,
-                         dropout=True)
+                         n_epochs=100, patience=10)
 
 
 def _create_env():
@@ -346,8 +344,6 @@ def experiment(algorithm, init_bc=False):
         agent = _create_vail_agent(mdp)
     else:
         raise NotImplementedError
-    # normalization callback
-    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
 
     # normalization callback
     normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
@@ -373,15 +369,14 @@ def experiment(algorithm, init_bc=False):
     epoch_js = []
     # gail train loop
     for it in range(100):
-        core.learn(n_steps=20481, n_steps_per_fit=2048, render=False)
-        dataset = core.evaluate(n_episodes=10, render=False)
+        core.learn(n_steps=20481, n_steps_per_fit=2048)
+        dataset = core.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
         R_mean = np.mean(compute_J(dataset))
         ep_len = np.mean(episodes_length(dataset))
         print('Epoch: {}  ->  J: {},  R: {},  Len_ep: {},  Entropy: {}'
               .format(str(it), J_mean,R_mean, ep_len,agent.policy.entropy()))
         epoch_js.append(J_mean)
-
 
     print("--- The train has finished ---")
     import matplotlib.pyplot as plt
