@@ -73,11 +73,11 @@ def _create_sac_agent(mdp):
     initial_replay_size = 500
     max_replay_size = 50000
     batch_size = 128
-    n_features = (128, 64)
+    n_features = (256, 128)
     warmup_transitions = 1000
     tau = 0.005
     lr_alpha = 3e-4
-    target_entropy = 10 * (-np.prod(mdp.info.action_space.shape).astype(np.float32))
+    target_entropy = 5 * (-np.prod(mdp.info.action_space.shape).astype(np.float32))
 
     # most simple environments run faster on CPU than with cuda
     use_cuda = torch.cuda.is_available()
@@ -121,7 +121,7 @@ def _create_mdp(env_id, horizon=1000, gamma=0.99):
     return mdp
 
 
-def train_expert_from_scratch_and_save_trajectories(env_id, n_trajectories,
+def train_expert_from_scratch_and_save_trajectories(env_id, n_save_trajectories,
                                                     expert_train_epochs=10,
                                                     horizon=1000):
     # train expert from scratch
@@ -143,14 +143,15 @@ def train_expert_from_scratch_and_save_trajectories(env_id, n_trajectories,
 
     for it in range(expert_train_epochs):
         core_expert.learn(n_steps=10000, n_steps_per_fit=1)
-        dataset = core_expert.evaluate(n_episodes=10, render=False)
+        dataset = core_expert.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
-        print('Epoch: {}, J: {}'.format(it, J_mean))
+        R_mean = np.mean(compute_J(dataset))
+        print('Epoch: {},  R: {},  J: {},'.format(it, R_mean, J_mean))
 
     # visualize and save expert trajectories
     input()
     core_expert.evaluate(n_episodes=5, render=True)
-    expert_dataset = core_expert.evaluate(n_episodes=n_trajectories, render=False)
+    expert_dataset = core_expert.evaluate(n_episodes=n_save_trajectories)
     states, actions, rewards, next_states, absorbing, last = \
         parse_dataset(expert_dataset)
 
@@ -165,5 +166,5 @@ def train_expert_from_scratch_and_save_trajectories(env_id, n_trajectories,
 
 if __name__ == "__main__":
     train_expert_from_scratch_and_save_trajectories(
-            env_id='Hopper-v2', n_trajectories=100,
+            env_id='Hopper-v2', n_save_trajectories=100,
             expert_train_epochs=20, horizon=1000)

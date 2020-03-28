@@ -1,0 +1,11 @@
+All experts where trained with SAC by running the extract_expert_trajectories.py. 100 trajectories where collected for each env:
+Pendulum-v0:        R(-156.48);    J();          Horizon(100);
+Hopper-v2:          R(1242.17);    J(152.53);    Horizon(1000);
+HalfCheetah-v2:     R(4415.06);    J(329.04);    Horizon(1000);
+Ant-v2:             R(3474.84);    J(361.55);    Horizon(1000);
+Walker2d-v2:        R(1556.65);    J(197.93);    Horizon(1000);
+
+*Reacher-v2:        R();           J();          Horizon(1000);
+
+
+*Bad performing experts
