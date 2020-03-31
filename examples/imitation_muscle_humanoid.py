@@ -317,13 +317,12 @@ def init_policy_with_bc(agent):
 
 
 def _create_env():
-    mdp_class = HumanoidGait
-    mdp_params = dict(gamma=0.99, horizon=2000, nmidsteps=10,
-                      goal_reward="trajectory",
-                      goal_reward_params=dict(use_error_terminate=True),
-                      use_muscles=True,
-                      obs_avg_window=1, act_avg_window=1)
-    return mdp_class, mdp_params
+    mdp = HumanoidGait(gamma=0.99, horizon=2000, n_intermediate_steps=10,
+                       goal_reward="trajectory",
+                       goal_reward_params=dict(use_error_terminate=True),
+                       use_muscles=True,
+                       obs_avg_window=1, act_avg_window=1)
+    return mdp
 
 
 def evaluate_dataset(dataset, mdp_info):
@@ -334,8 +333,7 @@ def evaluate_dataset(dataset, mdp_info):
 
 
 def experiment(algorithm, init_bc=False):
-    mdp_class, mdp_params = _create_env()
-    mdp = mdp_class(**mdp_params)
+    mdp = _create_env()
 
     if algorithm == "GAIL":
         agent = _create_gail_agent(mdp)

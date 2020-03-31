@@ -284,7 +284,7 @@ def init_policy_with_bc(agent, expert_data):
 
 
 def experiment(algorithm, init_bc=False, discr_only_state=False):
-    mdp = Gym(name='Pendulum-v0', horizon=200, gamma=0.99)
+    mdp = Gym(name='Pendulum-v0', horizon=100, gamma=0.99)
     horizon = mdp.info.horizon
 
     # prepare expert samples(no need to normalize the data as
