@@ -10,6 +10,6 @@ Imitation Learning Algorithms (and IRL) based on RL library [mushroom_rl](https:
     - Feature Expectation estimator with Monte Carlo rollouts;
     - Estimation with Least-Squares Temporal difference is not debbuged (TODO);
 
-- There are multiple examples available;
-- [Expert trajectories](https://github.com/ManuelPalermo/mushroom_rl_imitation/tree/master/examples/expert_data) for some evironments.
+- There are [multiple examples](https://github.com/ManuelPalermo/mushroom_rl_imitation/tree/master/examples) available;
+- [Expert trajectories](https://github.com/ManuelPalermo/mushroom_rl_imitation/tree/master/examples/expert_data) for some evironments;
 - Algorithms are still being benchmarked in multiple environments;
