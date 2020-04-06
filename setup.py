@@ -8,7 +8,7 @@ setup(name='mushroom_rl_imitation',
       license='MIT',
       author="Manuel Palermo",
       packages=[package for package in find_packages()
-                if package.startswith('mushroom_rl')],
+                if package.startswith('mushroom_rl_imitation')],
       install_requires=requires_list,
       zip_safe=False,
       )

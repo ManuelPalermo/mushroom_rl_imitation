@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/examples/irl/traj_pendulum/
+/examples/irl/traj_mountain_car/
+/examples/irl/pendulum_data/
