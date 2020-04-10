@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from mushroom_rl.utils.callbacks import PlotDataset
 
-from ImitationLearning.vail import VAIL
+from mushroom_rl_imitation.ImitationLearning.vail import VAIL
 from mushroom_rl.utils.preprocessors import StandardizationPreprocessor, MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
@@ -16,7 +16,7 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from ImitationLearning.gail import GAIL
+from mushroom_rl_imitation.ImitationLearning.gail import GAIL
 
 class CriticNetwork(nn.Module):
     # For sac agent

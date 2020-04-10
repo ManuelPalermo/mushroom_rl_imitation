@@ -109,3 +109,77 @@ class MonteCarlo(FeatExpect):
             for action in self.action_space:
                 self._add_feat_expect(states_trajectories[i], action,
                                       feat_expect * self.gamma)
+
+
+class LSTDmu(FeatExpect):
+    def __init__(self, expert_state, expert_actions, state_action_to_psi, state_to_phi, gamma, policy):
+        self.expert_state = expert_state
+        self.expert_actions = expert_actions
+
+        self.state_action_to_psi = state_action_to_psi
+        self.state_to_phi = state_to_phi
+
+        self.policy = policy
+
+        self.gamma = gamma
+
+        psi = self.state_action_to_psi(self.expert_state, self.expert_actions)
+        psi_prime = psi[1:, :]
+        psi_prime = np.concatenate([psi_prime, np.array([np.ones_like(psi_prime[-1, :])])], axis=0)
+
+        phi = self.state_to_phi(self.expert_state, self.expert_actions)
+        self.csi = self.lstd_mu_func(psi, psi_prime, phi, gamma)
+
+    def __call__(self, state, action):
+        state, action = super().__call__(state, action)
+        psi = self.state_action_to_psi(state, action)
+        res = self.feature_expectation(psi, self.csi)
+        return res
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    @staticmethod
+    def lstd_mu_func(psi, psi_prime, phi, gamma):
+        """
+        Least-Squares Temporal Differences \mu
+        This function is used to calculate to estimate the feature
+        expectation in the SCIRL algorithm both described at :
+        \"Edouard Klein, Matthieu Geist, Bilal PIOT, and Olivier Pietquin.
+        Inverse Reinforcement Learning through Structured Classification. In
+        Advances in Neural Information Processing Systems (NIPS 2012), Lake
+        Tahoe (NV, USA), December 2012.\"
+
+        Args:
+             psi (np.ndarray): feature matrix whose rows are the feature
+                vectors with respect to present state;
+             psi_prime (np.ndarray): feature matrix whose rows are the feature
+                vectors with respect to next state;
+             phi (np.ndarray): 2D feature matrix whose rows are the
+                reward’s feature vectors.
+
+        Returns:
+            Weights by which the dot product with the psi matrix gives the
+            feature expectations.
+
+        """
+        A = np.dot(psi.T, psi - gamma * psi_prime)
+        b = np.dot(psi.T, phi)
+
+        return np.dot(np.linalg.inv(A + 0.0001 * np.identity(A.shape[0])), b)
+
+    @staticmethod
+    def feature_expectation(psi, csi):
+        """
+
+        Args:
+            psi (np.ndarray): feature matrix whose rows are the feature
+                vectors with respect to present state;
+            csi (np.ndarray): Weights by which the dot product with the psi
+            matrix gives the feature expectations.
+
+        Returns:
+            Weights by which the dot product with the psi matrix gives the
+            feature expectations.
+        """
+        return np.dot(psi, csi)
