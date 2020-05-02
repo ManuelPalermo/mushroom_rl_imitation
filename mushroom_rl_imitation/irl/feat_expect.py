@@ -1,6 +1,6 @@
+
 import numpy as np
 from tqdm import tqdm
-from tqdm.contrib import tzip
 
 
 class FeatExpect:
@@ -54,11 +54,11 @@ class MonteCarlo(FeatExpect):
 
         absorbing_states_indexes = np.argwhere(absorbing_states).squeeze() + 1
 
-        for episodic_states, episodic_actions, episodic_absorbing in tzip(
+        for episodic_states, episodic_actions, episodic_absorbing in tqdm(zip(
                 np.split(expert_states, absorbing_states_indexes),
                 np.split(expert_actions, absorbing_states_indexes),
                 np.split(absorbing_states, absorbing_states_indexes),
-                position=0):
+                ), position=0):
             if episodic_states.size != 0:
                 self._calculate_feat_expect_episode(episodic_states, episodic_actions)
 
