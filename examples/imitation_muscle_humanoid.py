@@ -6,8 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from mushroom_rl_imitation.ImitationLearning import GAIL, VAIL
-
 from mushroom_rl.environments.mujoco_envs import HumanoidGait
 from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 from mushroom_rl.utils.callbacks.plot_dataset import PlotDataset
@@ -15,6 +13,8 @@ from mushroom_rl.utils.callbacks.plot_dataset import PlotDataset
 from mushroom_rl.policy import GaussianTorchPolicy
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J, episodes_length
+
+from mushroom_rl_imitation.imitation import GAIL, VAIL
 
 
 class CriticNetwork(nn.Module):
@@ -195,7 +195,7 @@ def _create_vail_agent(mdp, **kwargs):
     # Settings
     network_layers_actor = (512, 256)
     network_layers_critic = (512, 256)
-    network_layers_discriminator = 512
+    network_layers_discriminator = (512, 256)
 
     lr_actor = 5e-5
     lr_critic = 1e-4

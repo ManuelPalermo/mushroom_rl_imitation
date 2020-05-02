@@ -15,32 +15,35 @@ from mushroom_rl.utils.value_functions import compute_gae
 from mushroom_rl.algorithms.actor_critic.deep_actor_critic.ppo import PPO
 
 
-class VDBnetwork(nn.Module):
+class VAE(nn.Module):
     """
-    Variational Discriminator Bottleneck network.
-
-    "Variational Discriminator Bottleneck: Improving Imitation Learning,
-        Inverse RL, and GANs by Constraining Information Flow"
-    Peng X. et al.. 2019.
+    Variational-Autoencoder network.
 
     """
     def __init__(self, input_shape, output_shape, n_features, z_size, **kwargs):
-        super(VDBnetwork, self).__init__()
+        super(VAE, self).__init__()
 
         n_input = input_shape[-1]
-        n_output = output_shape[-1] # should always be 1(just like this for consistency)
+        n_output = output_shape[-1]
+
+        if isinstance(n_features, int):
+            n_features = [n_features, n_features // 2]
 
         # encoder
-        self._in = nn.Linear(n_input, n_features)
-        self._z_mu = nn.Linear(n_features, z_size)
-        self._z_v = nn.Linear(n_features, z_size)
+        self._enc0 = nn.Linear(n_input, n_features[0])
+        self._enc1 = nn.Linear(n_features[0], n_features[1])
+
+        self._z_mu = nn.Linear(n_features[1], z_size)
+        self._z_v = nn.Linear(n_features[1], z_size)
 
         # decoder
-        self._h1 = nn.Linear(z_size, n_features)
-        self._out = nn.Linear(n_features, n_output)
+        self._h1 = nn.Linear(z_size, n_features[1])
+        self._dec0 = nn.Linear(n_features[1], n_features[0])
+        self._dec1 = nn.Linear(n_features[0], n_output)
 
     def encoder(self, x):
-        h = torch.tanh(self._in(x))
+        h = torch.relu(self._enc0(x))
+        h = torch.relu(self._enc1(h))
         return self._z_mu(h), self._z_v(h)
 
     def reparameterize(self, mu, logvar):
@@ -49,8 +52,9 @@ class VDBnetwork(nn.Module):
         return mu + std * eps
 
     def discriminator(self, z):
-        h = torch.tanh(self._h1(z))
-        return torch.sigmoid(self._out(h))
+        h = torch.relu(self._h1(z))
+        h = torch.relu(self._dec0(h))
+        return torch.sigmoid(self._dec1(h))
 
     def forward(self, x, **kwargs):
         mu, logvar = self.encoder(x)
@@ -136,10 +140,11 @@ class VAIL(PPO):
         self._discriminator_fit_params = (dict(n_epochs=1) if discriminator_fit_params is None
                                           else discriminator_fit_params)
 
-        discriminator_params["network"] = VDBnetwork
+        discriminator_params["network"] = VAE
         discriminator_params["loss"] = VDBloss(info_constraint, lr_beta)
         discriminator_params.setdefault("z_size", 8)
         discriminator_params.setdefault("batch_size", 128)
+        discriminator_params.setdefault("output_shape", (1,))
         self._D = Regressor(TorchApproximator_, **discriminator_params)
 
         self._env_reward_frac = env_reward_frac

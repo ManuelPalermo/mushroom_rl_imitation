@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from mushroom_rl.utils.callbacks import PlotDataset
 
-from mushroom_rl_imitation.ImitationLearning.vail import VAIL
+from mushroom_rl_imitation.imitation.vail import VAIL
 from mushroom_rl.utils.preprocessors import StandardizationPreprocessor, MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
@@ -16,7 +16,7 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from mushroom_rl_imitation.ImitationLearning.gail import GAIL
+from mushroom_rl_imitation.imitation.gail import GAIL
 
 class CriticNetwork(nn.Module):
     # For sac agent
@@ -193,7 +193,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     # Settings
     network_layers_actor = (128, 64)
     network_layers_critic = (128, 64)
-    network_layers_discriminator = 128
+    network_layers_discriminator = (128, 64)
 
     lr_actor = 1e-3
     lr_critic = 1e-3
@@ -383,7 +383,7 @@ def experiment(algorithm, env_kwargs, n_expert_trajectories,
 
 if __name__ == "__main__":
     # algorithm to use(only GAIL and VAIL available)
-    algorithm = ["GAIL", "VAIL"][0]
+    algorithm = ["GAIL", "VAIL"][1]
 
     # gym environment to use(env_id can be any gym env, as long
     # as demonstrations are available for it)

@@ -14,8 +14,8 @@ from mushroom_rl.algorithms.actor_critic import SAC
 from mushroom_rl.core import Core
 from mushroom_rl.environments.gym_env import Gym
 from mushroom_rl.utils.dataset import compute_J, parse_dataset
-from mushroom_rl_imitation.Utils.kernels import RBF
-from mushroom_rl_imitation.Utils.numpy_extended import find_nearest
+from mushroom_rl_imitation.utils.kernels import RBF
+from mushroom_rl_imitation.utils.numpy_extended import find_nearest
 from mushroom_rl_imitation.irl.feat_expect import MonteCarlo
 from mushroom_rl_imitation.irl.scirl import SCIRL
 

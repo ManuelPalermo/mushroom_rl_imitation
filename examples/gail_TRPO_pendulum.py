@@ -14,8 +14,8 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from mushroom_rl_imitation.ImitationLearning.vail_TRPO import VAIL
-from mushroom_rl_imitation.ImitationLearning.gail_TRPO import GAIL
+from mushroom_rl_imitation.imitation.vail_TRPO import VAIL
+from mushroom_rl_imitation.imitation.gail_TRPO import GAIL
 
 
 class CriticNetwork(nn.Module):

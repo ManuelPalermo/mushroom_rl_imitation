@@ -13,8 +13,8 @@ from mushroom_rl.features.tiles import Tiles
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.dataset import compute_J, parse_dataset
 from mushroom_rl.utils.parameters import Parameter
-from mushroom_rl_imitation.Utils.kernels import RBF
-from mushroom_rl_imitation.Utils.numpy_extended import find_nearest
+from mushroom_rl_imitation.utils.kernels import RBF
+from mushroom_rl_imitation.utils.numpy_extended import find_nearest
 from mushroom_rl_imitation.irl.feat_expect import MonteCarlo
 from mushroom_rl_imitation.irl.scirl import SCIRL
 
