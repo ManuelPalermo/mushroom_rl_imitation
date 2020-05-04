@@ -57,6 +57,15 @@ class GAIL(PPO):
         self._act_mask = np.arange(demonstrations["actions"].shape[1]) \
             if act_mask is None else np.array(act_mask, dtype=np.int64)
 
+        self._add_save_attr(
+            _discriminator_fit_params='pickle',
+            _D='pickle',
+            _env_reward_frac='pickle',
+            _demonstrations='pickle',
+            _act_mask='pickle',
+            _state_mask='pickle',
+        )
+
     def load_demonstrations(self, demonstrations):
         self._demonstrations = demonstrations
 
