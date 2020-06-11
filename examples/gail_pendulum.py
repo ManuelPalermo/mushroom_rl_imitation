@@ -120,6 +120,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     gae_lambda = .95
     policy_std_0 = 0.3
 
+    n_epochs_discriminator = 1
     batch_size_discriminator = 128
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
@@ -161,6 +162,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                                   'weight_decay': weight_decay_actor}},
 
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -209,6 +211,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples
     gae_lambda = .95
     policy_std_0 = 0.3
 
+    n_epochs_discriminator = 1
     d_noise_vector_size = 8
     batch_size_discriminator = 128
     info_constraint = 0.5
@@ -255,6 +258,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples
 
 
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -362,5 +366,5 @@ def experiment(algorithm, init_bc=False, discr_only_state=False):
 
 
 if __name__ == "__main__":
-    algorithm = ["GAIL", "VAIL"]
-    experiment(algorithm=algorithm[1], init_bc=True, discr_only_state=True)
+    algorithm = ["GAIL", "VAIL"][1]
+    experiment(algorithm=algorithm, init_bc=True, discr_only_state=True)

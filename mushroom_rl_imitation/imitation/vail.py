@@ -80,7 +80,7 @@ class VDBloss(BCELoss):
 
         self._info_constr = info_constraint
         self._lr_beta = lr_beta
-        self._beta = 0
+        self._beta = 0.1
 
     def forward(self, inputs, target):
         prob, mu, logvar = inputs
@@ -88,29 +88,22 @@ class VDBloss(BCELoss):
         # bottleneck loss
         kld = kl_divergence(mu, logvar).mean()
         bottleneck_loss = kld - self._info_constr
-        self._beta = max(0, self._beta + self._lr_beta * bottleneck_loss)
 
-        # calculate discriminator loss(BinaryCrossEntropy + bottleneck)
+        # calculate discriminator loss(BinaryCrossEntropy + bottleneck_regularization)
         vdb_loss = (F.binary_cross_entropy(prob, target, weight=self.weight, reduction=self.reduction)
                     + self._beta * bottleneck_loss)
+
+        self._update_beta(bottleneck_loss)
         return vdb_loss
+
+    @torch.no_grad()
+    def _update_beta(self, bottleneck_loss):
+        self._beta = max(0, self._beta + self._lr_beta * bottleneck_loss)
 
 
 def kl_divergence(mu, logvar):
     kl_div = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1, dim=1)
     return kl_div
-
-
-class TorchApproximator_(TorchApproximator):
-    def _fit_batch(self, batch, use_weights, kwargs):
-        loss = self._compute_batch_loss(batch, use_weights, kwargs)
-
-        # needs to retain graph for the dual gradient descent(beta)
-        self._optimizer.zero_grad()
-        loss.backward(retain_graph=True)
-        self._optimizer.step()
-
-        return loss.item()
 
 
 class VAIL(PPO):
@@ -125,8 +118,8 @@ class VAIL(PPO):
 
     def __init__(self, mdp_info, policy_class, policy_params,
                  discriminator_params, critic_params, actor_optimizer,
-                 n_epochs_policy, batch_size_policy, eps_ppo, lam,
-                 demonstrations=None, info_constraint=0.5, lr_beta=1e-4,
+                 n_epochs_policy, n_epochs_discriminator, batch_size_policy,
+                 eps_ppo, lam, demonstrations=None, info_constraint=0.5, lr_beta=1e-4,
                  env_reward_frac=0.0, state_mask=None, act_mask=None, quiet=True,
                  critic_fit_params=None, discriminator_fit_params=None):
 
@@ -137,7 +130,7 @@ class VAIL(PPO):
                                    quiet=quiet, critic_fit_params=critic_fit_params)
 
         # discriminator params
-        self._discriminator_fit_params = (dict(n_epochs=1) if discriminator_fit_params is None
+        self._discriminator_fit_params = (dict() if discriminator_fit_params is None
                                           else discriminator_fit_params)
 
         discriminator_params["network"] = VAE
@@ -145,7 +138,8 @@ class VAIL(PPO):
         discriminator_params.setdefault("z_size", 8)
         discriminator_params.setdefault("batch_size", 128)
         discriminator_params.setdefault("output_shape", (1,))
-        self._D = Regressor(TorchApproximator_, **discriminator_params)
+        self._D = Regressor(TorchApproximator, **discriminator_params)
+        self._n_epochs_discriminator = n_epochs_discriminator
 
         self._env_reward_frac = env_reward_frac
         self._demonstrations = demonstrations   # should be: dict(states=np.array, actions=(np.array/None))
@@ -213,30 +207,30 @@ class VAIL(PPO):
         plcy_obs = plcy_obs[:, self._state_mask]
         plcy_act = plcy_act[:, self._act_mask]
 
-        # get batch of data to discriminate
-        if not self._act_mask.size > 0:
-            demo_obs = next(minibatch_generator(plcy_obs.shape[0],
-                                                self._demonstrations["states"]))[0]
-            inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
-        else:
-            demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
-                                                          self._demonstrations["states"],
-                                                          self._demonstrations["actions"]))
-            plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
-            demo_data = np.concatenate([demo_obs, demo_act], axis=1)
-            inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
+        for epoch in range(self._n_epochs_discriminator):
+            # get batch of data to discriminate
+            if not self._act_mask.size > 0:
+                demo_obs = next(minibatch_generator(plcy_obs.shape[0],
+                                                    self._demonstrations["states"]))[0]
+                inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
+            else:
+                demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
+                                                              self._demonstrations["states"],
+                                                              self._demonstrations["actions"]))
+                plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
+                demo_data = np.concatenate([demo_obs, demo_act], axis=1)
+                inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
 
-        # create label targets: (demos(~1) or policy(~0))
-        plcy_target = np.zeros((plcy_obs.shape[0], 1), dtype=np.float32)
-        demo_target = np.ones((demo_obs.shape[0], 1), dtype=np.float32)
-        targets = np.concatenate([plcy_target, demo_target])
+            # create label targets with flipped labels: (demos(~0) or policy(~1))
+            plcy_target = np.ones((plcy_obs.shape[0], 1), dtype=np.float32)
+            demo_target = np.zeros((demo_obs.shape[0], 1), dtype=np.float32)
+            targets = np.concatenate([plcy_target, demo_target])
 
-        self._D._impl.model._loss._beta = 0  # set dual beta=0
-        self._D.fit(inputs, targets, **self._discriminator_fit_params)
+            self._D.fit(inputs, targets, **self._discriminator_fit_params)
 
+    @torch.no_grad()
     def _make_discrim_reward(self, state, action):
         plcy_data = np.concatenate([state[:, self._state_mask],
                                     action[:, self._act_mask]], axis=1)
-        with torch.no_grad():
-            plcy_prob = self._D(plcy_data)[0]
-            return np.squeeze(-np.log(1 - plcy_prob + 1e-8)).astype(np.float32)
+        plcy_prob = self._D(plcy_data)[0]
+        return np.squeeze(-np.log(plcy_prob + 1e-8)).astype(np.float32)

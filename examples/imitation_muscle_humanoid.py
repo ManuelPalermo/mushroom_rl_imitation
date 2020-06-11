@@ -106,12 +106,12 @@ def _create_gail_agent(mdp, **kwargs):
     network_layers_discriminator = (512, 256)
 
     lr_actor = 5e-5
-    lr_critic = 1e-4
-    lr_discriminator = 5e-5
+    lr_critic = 2e-4
+    lr_discriminator = 1e-4
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 1e-7
+    weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
     batch_size_policy = 256
@@ -119,6 +119,7 @@ def _create_gail_agent(mdp, **kwargs):
     gae_lambda = .95
     policy_std_0 = 0.3
 
+    n_epochs_discriminator = 2
     batch_size_discriminator = 256
 
     discrim_obs_mask = np.arange(0, 27)
@@ -161,6 +162,7 @@ def _create_gail_agent(mdp, **kwargs):
                                                   'weight_decay': weight_decay_actor}},
 
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -198,8 +200,8 @@ def _create_vail_agent(mdp, **kwargs):
     network_layers_discriminator = (512, 256)
 
     lr_actor = 5e-5
-    lr_critic = 1e-4
-    lr_discriminator = 5e-5
+    lr_critic = 2e-4
+    lr_discriminator = 1e-4
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
@@ -211,8 +213,9 @@ def _create_vail_agent(mdp, **kwargs):
     gae_lambda = .95
     policy_std_0 = 0.3
 
+    n_epochs_discriminator = 2
     batch_size_discriminator = 256
-    lr_beta = 5e-6
+    lr_beta = 1e-5
     d_noise_vector_size = 32
     info_constraint = 0.5
 
@@ -255,8 +258,8 @@ def _create_vail_agent(mdp, **kwargs):
                                        'params': {'lr':           lr_actor,
                                                   'weight_decay': weight_decay_actor}},
 
-
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -317,9 +320,9 @@ def init_policy_with_bc(agent):
 
 
 def _create_env():
-    mdp = HumanoidGait(gamma=0.99, horizon=2000, n_intermediate_steps=10,
+    mdp = HumanoidGait(gamma=0.99, horizon=1000, n_intermediate_steps=10,
                        goal_reward="trajectory",
-                       goal_reward_params=dict(use_error_terminate=True),
+                       goal_reward_params=dict(use_error_terminate=False),
                        use_muscles=True,
                        obs_avg_window=1, act_avg_window=1)
     return mdp
@@ -391,4 +394,4 @@ def experiment(algorithm, init_bc=False):
 if __name__ == "__main__":
     # not tested yet(training but no results so far)
     algorithm = ["GAIL", "VAIL"]
-    experiment(algorithm=algorithm[0], init_bc=True)
+    experiment(algorithm=algorithm[1], init_bc=True)

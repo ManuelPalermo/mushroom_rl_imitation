@@ -18,6 +18,7 @@ from mushroom_rl.utils.dataset import compute_J
 
 from mushroom_rl_imitation.imitation.gail import GAIL
 
+
 class CriticNetwork(nn.Module):
     # For sac agent
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
@@ -107,12 +108,12 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     network_layers_discriminator = (128, 64)
 
     lr_actor = 1e-3
-    lr_critic = 1e-3
+    lr_critic = 2e-3
     lr_discriminator = 1e-3
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 1e-5
+    weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
     batch_size_policy = 256
@@ -120,6 +121,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     gae_lambda = .95
     policy_std_0 = 0.5
 
+    n_epochs_discriminator = 1
     batch_size_discriminator = 256
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
@@ -161,6 +163,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                                   'weight_decay': weight_decay_actor}},
 
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -196,12 +199,12 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     network_layers_discriminator = (128, 64)
 
     lr_actor = 1e-3
-    lr_critic = 1e-3
+    lr_critic = 2e-3
     lr_discriminator = 1e-3
 
     weight_decay_actor = 0.0
     weight_decay_critic = 0.0
-    weight_decay_discriminator = 1e-5
+    weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
     batch_size_policy = 256
@@ -209,10 +212,11 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     gae_lambda = .95
     policy_std_0 = 0.5
 
+    n_epochs_discriminator = 1
     d_noise_vector_size = 16
     batch_size_discriminator = 256
     info_constraint = 0.5
-    lr_beta = 1e-4
+    lr_beta = 5e-5
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -255,6 +259,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
 
 
                       n_epochs_policy=n_epochs_policy,
+                      n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
@@ -328,7 +333,6 @@ def experiment(algorithm, env_kwargs, n_expert_trajectories,
             n_samples=horizon*n_expert_trajectories,
             data_normalizer=None,
     )
-    #warmup_running_norm(normalizer=normalizer, expert_data=expert_data)
 
     if algorithm == "GAIL":
         agent = _create_gail_agent(mdp, expert_data, discr_only_state)
@@ -374,7 +378,7 @@ def experiment(algorithm, env_kwargs, n_expert_trajectories,
     input("Press any key to visualize trained policy")
 
     # evaluate and show trained policy
-    core.evaluate(n_episodes=2, render=True)
+    core.evaluate(n_episodes=5, render=True)
     dataset = core.evaluate(n_episodes=20)
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
     R_mean = np.mean(compute_J(dataset))

@@ -16,32 +16,35 @@ from mushroom_rl.utils.dataset import parse_dataset
 from mushroom_rl.utils.value_functions import compute_gae
 
 
-class VDBnetwork(nn.Module):
+class VAE(nn.Module):
     """
-    Variational Discriminator Bottleneck network.
-
-    "Variational Discriminator Bottleneck: Improving Imitation Learning,
-        Inverse RL, and GANs by Constraining Information Flow"
-    Peng X. et al.. 2019.
+    Variational-Autoencoder network.
 
     """
     def __init__(self, input_shape, output_shape, n_features, z_size, **kwargs):
-        super(VDBnetwork, self).__init__()
+        super(VAE, self).__init__()
 
         n_input = input_shape[-1]
-        n_output = output_shape[-1] # should always be 1(just like this for consistency)
+        n_output = output_shape[-1]
+
+        if isinstance(n_features, int):
+            n_features = [n_features, n_features // 2]
 
         # encoder
-        self._in = nn.Linear(n_input, n_features)
-        self._z_mu = nn.Linear(n_features, z_size)
-        self._z_v = nn.Linear(n_features, z_size)
+        self._enc0 = nn.Linear(n_input, n_features[0])
+        self._enc1 = nn.Linear(n_features[0], n_features[1])
+
+        self._z_mu = nn.Linear(n_features[1], z_size)
+        self._z_v = nn.Linear(n_features[1], z_size)
 
         # decoder
-        self._h1 = nn.Linear(z_size, n_features)
-        self._out = nn.Linear(n_features, n_output)
+        self._h1 = nn.Linear(z_size, n_features[1])
+        self._dec0 = nn.Linear(n_features[1], n_features[0])
+        self._dec1 = nn.Linear(n_features[0], n_output)
 
     def encoder(self, x):
-        h = torch.tanh(self._in(x))
+        h = torch.relu(self._enc0(x))
+        h = torch.relu(self._enc1(h))
         return self._z_mu(h), self._z_v(h)
 
     def reparameterize(self, mu, logvar):
@@ -50,8 +53,9 @@ class VDBnetwork(nn.Module):
         return mu + std * eps
 
     def discriminator(self, z):
-        h = torch.tanh(self._h1(z))
-        return torch.sigmoid(self._out(h))
+        h = torch.relu(self._h1(z))
+        h = torch.relu(self._dec0(h))
+        return torch.sigmoid(self._dec1(h))
 
     def forward(self, x, **kwargs):
         mu, logvar = self.encoder(x)
@@ -77,7 +81,7 @@ class VDBloss(BCELoss):
 
         self._info_constr = info_constraint
         self._lr_beta = lr_beta
-        self._beta = 0
+        self._beta = 0.1
 
     def forward(self, inputs, target):
         prob, mu, logvar = inputs
@@ -85,29 +89,22 @@ class VDBloss(BCELoss):
         # bottleneck loss
         kld = kl_divergence(mu, logvar).mean()
         bottleneck_loss = kld - self._info_constr
-        self._beta = max(0, self._beta + self._lr_beta * bottleneck_loss)
 
-        # calculate discriminator loss(BinaryCrossEntropy + bottleneck)
+        # calculate discriminator loss(BinaryCrossEntropy + bottleneck_regularization)
         vdb_loss = (F.binary_cross_entropy(prob, target, weight=self.weight, reduction=self.reduction)
                     + self._beta * bottleneck_loss)
+
+        self._update_beta(bottleneck_loss)
         return vdb_loss
+
+    @torch.no_grad()
+    def _update_beta(self, bottleneck_loss):
+        self._beta = max(0, self._beta + self._lr_beta * bottleneck_loss)
 
 
 def kl_divergence(mu, logvar):
     kl_div = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1, dim=1)
     return kl_div
-
-
-class TorchApproximator_(TorchApproximator):
-    def _fit_batch(self, batch, use_weights, kwargs):
-        loss = self._compute_batch_loss(batch, use_weights, kwargs)
-
-        # needs to retain graph for the dual gradient descent(beta)
-        self._optimizer.zero_grad()
-        loss.backward(retain_graph=True)
-        self._optimizer.step()
-
-        return loss.item()
 
 
 class VAIL(TRPO):
@@ -122,6 +119,7 @@ class VAIL(TRPO):
 
     def __init__(self, mdp_info, policy_class, policy_params,
                  discriminator_params, critic_params,
+                 n_epochs_discriminator=1,
                  ent_coeff=0., max_kl=.001, lam=1.,
                  n_epochs_line_search=10, n_epochs_cg=10,
                  cg_damping=1e-2, cg_residual_tol=1e-10,
@@ -137,14 +135,16 @@ class VAIL(TRPO):
                                    quiet=quiet, critic_fit_params=critic_fit_params)
 
         # discriminator params
-        self._discriminator_fit_params = (dict(n_epochs=1) if discriminator_fit_params is None
+        self._discriminator_fit_params = (dict() if discriminator_fit_params is None
                                           else discriminator_fit_params)
 
-        discriminator_params["network"] = VDBnetwork
+        discriminator_params["network"] = VAE
         discriminator_params["loss"] = VDBloss(info_constraint, lr_beta)
         discriminator_params.setdefault("z_size", 8)
         discriminator_params.setdefault("batch_size", 128)
-        self._D = Regressor(TorchApproximator_, **discriminator_params)
+        discriminator_params.setdefault("output_shape", (1,))
+        self._D = Regressor(TorchApproximator, **discriminator_params)
+        self._n_epochs_discriminator = n_epochs_discriminator
 
         self._env_reward_frac = env_reward_frac
         self._demonstrations = demonstrations   # should be: dict(states=np.array, actions=(np.array/None))
@@ -227,30 +227,30 @@ class VAIL(TRPO):
         plcy_obs = plcy_obs[:, self._state_mask]
         plcy_act = plcy_act[:, self._act_mask]
 
-        # get batch of data to discriminate
-        if not self._act_mask.size > 0:
-            demo_obs = next(minibatch_generator(plcy_obs.shape[0],
-                                                self._demonstrations["states"]))[0]
-            inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
-        else:
-            demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
-                                                          self._demonstrations["states"],
-                                                          self._demonstrations["actions"]))
-            plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
-            demo_data = np.concatenate([demo_obs, demo_act], axis=1)
-            inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
+        for epoch in range(self._n_epochs_discriminator):
+            # get batch of data to discriminate
+            if not self._act_mask.size > 0:
+                demo_obs = next(minibatch_generator(plcy_obs.shape[0],
+                                                    self._demonstrations["states"]))[0]
+                inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
+            else:
+                demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
+                                                              self._demonstrations["states"],
+                                                              self._demonstrations["actions"]))
+                plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
+                demo_data = np.concatenate([demo_obs, demo_act], axis=1)
+                inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
 
-        # create label targets: (demos(~1) or policy(~0))
-        plcy_target = np.zeros((plcy_obs.shape[0], 1), dtype=np.float32)
-        demo_target = np.ones((demo_obs.shape[0], 1), dtype=np.float32)
-        targets = np.concatenate([plcy_target, demo_target])
+            # create label targets with flipped labels: (demos(~0) or policy(~1))
+            plcy_target = np.ones((plcy_obs.shape[0], 1), dtype=np.float32)
+            demo_target = np.zeros((demo_obs.shape[0], 1), dtype=np.float32)
+            targets = np.concatenate([plcy_target, demo_target])
 
-        self._D._impl.model._loss._beta = 0  # set dual beta=0
-        self._D.fit(inputs, targets, **self._discriminator_fit_params)
+            self._D.fit(inputs, targets, **self._discriminator_fit_params)
 
+    @torch.no_grad()
     def _make_discrim_reward(self, state, action):
         plcy_data = np.concatenate([state[:, self._state_mask],
                                     action[:, self._act_mask]], axis=1)
-        with torch.no_grad():
-            plcy_prob = self._D(plcy_data)[0]
-            return np.squeeze(-np.log(1 - plcy_prob + 1e-8)).astype(np.float32)
+        plcy_prob = self._D(plcy_data)[0]
+        return np.squeeze(-np.log(plcy_prob + 1e-8)).astype(np.float32)

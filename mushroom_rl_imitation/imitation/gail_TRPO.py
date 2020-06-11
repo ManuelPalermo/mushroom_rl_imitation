@@ -23,6 +23,7 @@ class GAIL(TRPO):
 
     def __init__(self, mdp_info, policy_class, policy_params,
                  discriminator_params, critic_params,
+                 n_epochs_discriminator=1,
                  ent_coeff=0., max_kl=.001, lam=1.,
                  n_epochs_line_search=10, n_epochs_cg=10,
                  cg_damping=1e-2, cg_residual_tol=1e-10,
@@ -38,12 +39,13 @@ class GAIL(TRPO):
                                    quiet=quiet, critic_fit_params=critic_fit_params)
 
         # discriminator params
-        self._discriminator_fit_params = (dict(n_epochs=1) if discriminator_fit_params is None
+        self._discriminator_fit_params = (dict() if discriminator_fit_params is None
                                           else discriminator_fit_params)
 
         discriminator_params.setdefault("loss", torch.nn.BCELoss())
         discriminator_params.setdefault("batch_size", 128)
         self._D = Regressor(TorchApproximator, **discriminator_params)
+        self._n_epochs_discriminator = n_epochs_discriminator
 
         self._env_reward_frac = env_reward_frac
         self._demonstrations = demonstrations   # should be: dict(states=np.array, actions=(np.array/None))
@@ -68,7 +70,6 @@ class GAIL(TRPO):
             _act_mask='pickle',
             _state_mask='pickle',
         )
-
 
     def load_demonstrations(self, demonstrations):
         self._demonstrations = demonstrations
@@ -127,28 +128,30 @@ class GAIL(TRPO):
         plcy_obs = plcy_obs[:, self._state_mask]
         plcy_act = plcy_act[:, self._act_mask]
 
-        # get batch of data to discriminate
-        if not self._act_mask.size > 0:
-            demo_obs = next(minibatch_generator(plcy_obs.shape[0],
-                                                self._demonstrations["states"]))[0]
-            inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
-        else:
-            demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
-                                                          self._demonstrations["states"],
-                                                          self._demonstrations["actions"]))
-            plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
-            demo_data = np.concatenate([demo_obs, demo_act], axis=1)
-            inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
+        for epoch in range(self._n_epochs_discriminator):
+            # get batch of data to discriminate
+            if not self._act_mask.size > 0:
+                demo_obs = next(minibatch_generator(plcy_obs.shape[0],
+                                                    self._demonstrations["states"]))[0]
+                inputs = np.concatenate([plcy_obs, demo_obs.astype(np.float32)])
+            else:
+                demo_obs, demo_act = next(minibatch_generator(plcy_obs.shape[0],
+                                                              self._demonstrations["states"],
+                                                              self._demonstrations["actions"]))
+                plcy_data = np.concatenate([plcy_obs, plcy_act], axis=1)
+                demo_data = np.concatenate([demo_obs, demo_act], axis=1)
+                inputs = np.concatenate([plcy_data, demo_data.astype(np.float32)])
 
-        # create label targets: (demos(~1) or policy(~0))
-        plcy_target = np.zeros((plcy_obs.shape[0], 1), dtype=np.float32)
-        demo_target = np.ones((demo_obs.shape[0], 1), dtype=np.float32)
-        targets = np.concatenate([plcy_target, demo_target])
-        self._D.fit(inputs, targets, **self._discriminator_fit_params)
+            # create label targets with noisy flipped labels: (demos(~0) or policy(~1))
+            plcy_target = np.random.uniform(low=0.80, high=0.99, size=(plcy_obs.shape[0], 1)).astype(np.float32)
+            demo_target = np.random.uniform(low=0.01, high=0.10, size=(plcy_obs.shape[0], 1)).astype(np.float32)
+            targets = np.concatenate([plcy_target, demo_target])
 
+            self._D.fit(inputs, targets, **self._discriminator_fit_params)
+
+    @torch.no_grad()
     def _make_discrim_reward(self, state, action):
         plcy_data = np.concatenate([state[:, self._state_mask],
                                     action[:, self._act_mask]], axis=1)
-        with torch.no_grad():
-            plcy_prob = self._D(plcy_data)
-            return np.squeeze(-np.log(1 - plcy_prob + 1e-8)).astype(np.float32)
+        plcy_prob = self._D(plcy_data)
+        return np.squeeze(-np.log(plcy_prob + 1e-8)).astype(np.float32)
