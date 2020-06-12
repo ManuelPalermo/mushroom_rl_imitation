@@ -163,6 +163,7 @@ class VAIL(TRPO):
 
         self._add_save_attr(
             _discriminator_fit_params='pickle',
+            _n_epochs_discriminator='pickle',
             _D='pickle',
             _env_reward_frac='pickle',
             _demonstrations='pickle',
