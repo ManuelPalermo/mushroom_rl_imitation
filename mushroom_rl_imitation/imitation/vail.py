@@ -158,9 +158,10 @@ class VAIL(PPO):
 
         self._add_save_attr(
             _discriminator_fit_params='pickle',
+            _n_epochs_discriminator='pickle',
             _D='pickle',
             _env_reward_frac='pickle',
-            _demonstrations='pickle',
+            _demonstrations='pick2048le',
             _act_mask='pickle',
             _state_mask='pickle',
         )
