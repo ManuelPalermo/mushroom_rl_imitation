@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from mushroom_rl.utils.callbacks import PlotDataset
 
-from mushroom_rl_imitation.imitation.vail import VAIL
 from mushroom_rl.utils.preprocessors import StandardizationPreprocessor, MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
@@ -16,7 +15,7 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from mushroom_rl_imitation.imitation.gail import GAIL
+from mushroom_rl_imitation.imitation import GAIL, VAIL
 
 
 class CriticNetwork(nn.Module):
@@ -117,6 +116,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
 
     n_epochs_policy = 3
     batch_size_policy = 256
+    batch_size_critic = 256
     clip_eps_ppo = .2
     gae_lambda = .95
     policy_std_0 = 0.5
@@ -141,6 +141,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=batch_size_critic,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -151,7 +152,6 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                            'params': {'lr':           lr_discriminator,
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
-
                                 network=DiscriminatorNetwork,
                                 input_shape=discrim_input_shape,
                                 n_features=network_layers_discriminator,
@@ -161,7 +161,6 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     alg_params = dict(actor_optimizer={'class':  optim.Adam,
                                        'params': {'lr':           lr_actor,
                                                   'weight_decay': weight_decay_actor}},
-
                       n_epochs_policy=n_epochs_policy,
                       n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
@@ -208,6 +207,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
 
     n_epochs_policy = 3
     batch_size_policy = 256
+    batch_size_critic = 256
     clip_eps_ppo = .2
     gae_lambda = .95
     policy_std_0 = 0.5
@@ -235,6 +235,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=batch_size_critic,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -246,7 +247,6 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
                                 z_size=d_noise_vector_size,
-
                                 input_shape=discrim_input_shape,
                                 output_shape=(1,),
                                 n_features=network_layers_discriminator,
@@ -256,8 +256,6 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     alg_params = dict(actor_optimizer={'class':  optim.Adam,
                                        'params': {'lr':           lr_actor,
                                                   'weight_decay': weight_decay_actor}},
-
-
                       n_epochs_policy=n_epochs_policy,
                       n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,

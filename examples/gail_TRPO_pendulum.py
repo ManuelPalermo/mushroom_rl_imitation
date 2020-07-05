@@ -135,6 +135,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=128,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -145,7 +146,6 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                            'params': {'lr':           lr_discriminator,
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
-
                                 network=DiscriminatorNetwork,
                                 input_shape=discrim_input_shape,
                                 n_features=network_layers_discriminator,
@@ -188,7 +188,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     # Settings
     network_layers_actor = (128, 64)
     network_layers_critic = (128, 64)
-    network_layers_discriminator = 128
+    network_layers_discriminator = (128, 64)
 
     lr_critic = 3e-4
     lr_discriminator = 3e-4
@@ -222,6 +222,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=128,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -233,7 +234,6 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
                                 z_size=d_noise_vector_size,
-
                                 input_shape=discrim_input_shape,
                                 output_shape=(1,),
                                 n_features=network_layers_discriminator,

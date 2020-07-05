@@ -115,7 +115,8 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     weight_decay_discriminator = 0.0
 
     n_epochs_policy = 3
-    batch_size_policy = 128                # 64
+    batch_size_policy = 128
+    batch_size_critic = 128
     clip_eps_ppo = .2
     gae_lambda = .95
     policy_std_0 = 0.3
@@ -140,6 +141,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=batch_size_critic,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -150,7 +152,6 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                            'params': {'lr':           lr_discriminator,
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
-
                                 network=DiscriminatorNetwork,
                                 input_shape=discrim_input_shape,
                                 n_features=network_layers_discriminator,
@@ -160,7 +161,6 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     alg_params = dict(actor_optimizer={'class':  optim.Adam,
                                        'params': {'lr':           lr_actor,
                                                   'weight_decay': weight_decay_actor}},
-
                       n_epochs_policy=n_epochs_policy,
                       n_epochs_discriminator=n_epochs_discriminator,
                       batch_size_policy=batch_size_policy,
@@ -207,6 +207,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples
 
     n_epochs_policy = 3
     batch_size_policy = 128
+    batch_size_critic = 128
     clip_eps_ppo = .2
     gae_lambda = .95
     policy_std_0 = 0.3
@@ -234,6 +235,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples
                                     'params': {'lr':           lr_critic,
                                                'weight_decay': weight_decay_critic}},
                          loss=F.mse_loss,
+                         batch_size=batch_size_critic,
                          input_shape=mdp_info.observation_space.shape,
                          output_shape=(1,),
                          n_features=network_layers_critic,
@@ -245,7 +247,6 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, n_expert_samples
                                                       'weight_decay': weight_decay_discriminator}},
                                 batch_size=batch_size_discriminator,
                                 z_size=d_noise_vector_size,
-
                                 input_shape=discrim_input_shape,
                                 output_shape=(1,),
                                 n_features=network_layers_discriminator,
