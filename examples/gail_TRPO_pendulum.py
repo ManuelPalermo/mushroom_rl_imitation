@@ -14,8 +14,7 @@ from mushroom_rl.environments import Gym
 from mushroom_rl.core import Core
 from mushroom_rl.utils.dataset import compute_J
 
-from mushroom_rl_imitation.imitation.vail_TRPO import VAIL
-from mushroom_rl_imitation.imitation.gail_TRPO import GAIL
+from mushroom_rl_imitation.imitation import VAIL_TRPO, GAIL_TRPO
 
 
 class CriticNetwork(nn.Module):
@@ -174,9 +173,10 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    agent = GAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
-                 discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=expert_data, **alg_params)
+    agent = GAIL_TRPO(mdp_info=mdp_info, policy_class=GaussianTorchPolicy,
+                      policy_params=policy_params,
+                      discriminator_params=discriminator_params, critic_params=critic_params,
+                      demonstrations=expert_data, **alg_params)
     return agent
 
 
@@ -264,9 +264,10 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                )
     policy_params = {**policy_params, **torch_approx_params}
 
-    agent = VAIL(mdp_info=mdp_info, policy_class=GaussianTorchPolicy, policy_params=policy_params,
-                 discriminator_params=discriminator_params, critic_params=critic_params,
-                 demonstrations=expert_data, **alg_params)
+    agent = VAIL_TRPO(mdp_info=mdp_info, policy_class=GaussianTorchPolicy,
+                      policy_params=policy_params,
+                      discriminator_params=discriminator_params, critic_params=critic_params,
+                      demonstrations=expert_data, **alg_params)
     return agent
 
 

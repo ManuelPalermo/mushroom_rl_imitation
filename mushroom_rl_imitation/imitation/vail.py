@@ -161,7 +161,7 @@ class VAIL(PPO):
             _n_epochs_discriminator='pickle',
             _D='pickle',
             _env_reward_frac='pickle',
-            _demonstrations='pick2048le',
+            _demonstrations='pickle',
             _act_mask='pickle',
             _state_mask='pickle',
         )
