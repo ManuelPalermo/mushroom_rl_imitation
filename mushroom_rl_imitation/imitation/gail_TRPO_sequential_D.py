@@ -1,22 +1,21 @@
+from copy import deepcopy
 
 import torch
 import numpy as np
 
 from mushroom_rl.approximators import Regressor
 from mushroom_rl.approximators.parametric import TorchApproximator
-from mushroom_rl.utils.torch import to_float_tensor
+from mushroom_rl.utils.torch import get_gradient, zero_grad, to_float_tensor
 from mushroom_rl.utils.dataset import parse_dataset
 from mushroom_rl.utils.value_functions import compute_gae
-from mushroom_rl.algorithms.actor_critic.deep_actor_critic.ppo import PPO
+from mushroom_rl.algorithms.actor_critic.deep_actor_critic.trpo import TRPO
 
 from mushroom_rl_imitation.utils.minibatch_generator_extra import \
     dataset_as_sequential, minibatch_sample_sequential
 
-
-class GAIL(PPO):
+class GAIL(TRPO):
     """
-    Generative Adversarial Imitation Learning(GAIL) implementation. Uses
-        PPO policy updates instead of TRPO.
+    Generative Adversarial Imitation Learning(GAIL) implementation.
 
     "Generative Adversarial Imitation Learning"
     Ho, J., & Ermon, S. (2016).
@@ -24,18 +23,21 @@ class GAIL(PPO):
     """
 
     def __init__(self, mdp_info, policy_class, policy_params,
-                 discriminator_params, critic_params, actor_optimizer,
-                 n_epochs_policy, n_epochs_discriminator, batch_size_policy,
-                 eps_ppo, lam, ent_weight, demonstrations=None, env_reward_frac=0.0,
+                 discriminator_params, critic_params,
+                 n_epochs_discriminator=1,
+                 ent_coeff=0., max_kl=.001, lam=1.,
+                 n_epochs_line_search=10, n_epochs_cg=10,
+                 cg_damping=1e-2, cg_residual_tol=1e-10,
+                 demonstrations=None, env_reward_frac=0.0,
                  state_mask=None, act_mask=None, disc_seq_size=2, quiet=True,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
         policy = policy_class(**policy_params)
-        super(GAIL, self).__init__(mdp_info, policy, actor_optimizer, critic_params,
-                                   n_epochs_policy, batch_size_policy, eps_ppo, lam,
-                                   quiet=quiet, critic_fit_params=critic_fit_params,
-                                   ent_weight=ent_weight)
+        super(GAIL, self).__init__(mdp_info, policy, critic_params,
+                                   ent_coeff, max_kl, lam, n_epochs_line_search,
+                                   n_epochs_cg, cg_damping, cg_residual_tol,
+                                   quiet=quiet, critic_fit_params=critic_fit_params)
 
         # discriminator params
         self._discriminator_fit_params = (dict() if discriminator_fit_params is None
@@ -110,11 +112,28 @@ class GAIL(PPO):
         np_adv = (np_adv - np.mean(np_adv)) / (np.std(np_adv) + 1e-8)
         adv = to_float_tensor(np_adv, self.policy.use_cuda)
 
-        old_pol_dist = self.policy.distribution_t(obs)
-        old_log_p = old_pol_dist.log_prob(act)[:, None].detach()
+        # Policy update
+        self._old_policy = deepcopy(self.policy)
+        old_pol_dist = self._old_policy.distribution_t(obs)
+        old_log_prob = self._old_policy.log_prob_t(obs, act).detach()
 
+        zero_grad(self.policy.parameters())
+        loss = self._compute_loss(obs, act, adv, old_log_prob)
+
+        prev_loss = loss.item()
+
+        # Compute Gradient
+        loss.backward()
+        g = get_gradient(self.policy.parameters())
+
+        # Compute direction through conjugate gradient
+        stepdir = self._conjugate_gradient(g, obs, old_pol_dist)
+
+        # Line search
+        self._line_search(obs, act, adv, old_log_prob, old_pol_dist, prev_loss, stepdir)
+
+        # VF update
         self._V.fit(x, v_target, **self._critic_fit_params)
-        self._update_policy(obs, act, adv, old_log_p)
 
         # Print fit information
         self._print_fit_info(dataset, x, v_target, old_pol_dist)
