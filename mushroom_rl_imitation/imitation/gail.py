@@ -25,14 +25,14 @@ class GAIL(PPO):
                  discriminator_params, critic_params, actor_optimizer,
                  n_epochs_policy, n_epochs_discriminator, batch_size_policy,
                  eps_ppo, lam, demonstrations=None, env_reward_frac=0.0,
-                 state_mask=None, act_mask=None, quiet=True,
+                 state_mask=None, act_mask=None,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
         policy = policy_class(**policy_params)
         super(GAIL, self).__init__(mdp_info, policy, actor_optimizer, critic_params,
                                    n_epochs_policy, batch_size_policy, eps_ppo, lam,
-                                   quiet=quiet, critic_fit_params=critic_fit_params)
+                                   critic_fit_params=critic_fit_params)
 
         # discriminator params
         self._discriminator_fit_params = (dict() if discriminator_fit_params is None
@@ -103,7 +103,7 @@ class GAIL(PPO):
         self._update_policy(obs, act, adv, old_log_p)
 
         # Print fit information
-        self._print_fit_info(dataset, x, v_target, old_pol_dist)
+        self._log_info(dataset, x, v_target, old_pol_dist)
         self._iter += 1
 
     def _fit_discriminator(self, plcy_obs, plcy_act):

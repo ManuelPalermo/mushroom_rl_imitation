@@ -6,10 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from ImitationLearning import GAIL, VAIL
+from mushroom_rl_imitation.imitation import GAIL, VAIL
 
 from mushroom_rl.environments.mujoco_envs import HumanoidGait
-from mushroom_rl.utils.preprocessors import NormalizationBoxedPreprocessor
+from mushroom_rl.utils.preprocessors import MinMaxPreprocessor
 
 from mushroom_rl.policy import GaussianTorchPolicy
 from mushroom_rl.core import Core
@@ -293,7 +293,7 @@ def _load_demos_selected_discriminator(mdp_info):
     norm_info = deepcopy(mdp_info)
     norm_info.observation_space = Box(low=norm_info.observation_space._low[2:29],
                                       high=norm_info.observation_space._high[2:29])
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=norm_info)
+    normalizer = MinMaxPreprocessor(mdp_info=norm_info)
 
     normalizer.set_state(dict(mean=states.mean(axis=0),
                               std=states.std(axis=0),
@@ -346,7 +346,7 @@ def experiment(algorithm, init_bc=False):
     else:
         raise NotImplementedError
     # normalization callback
-    normalizer = NormalizationBoxedPreprocessor(mdp_info=mdp.info)
+    normalizer = MinMaxPreprocessor(mdp_info=mdp.info)
 
     # Algorithm(with normalizing and plotting)
     core = Core(agent, mdp, preprocessors=[normalizer])

@@ -16,13 +16,13 @@ from mushroom_rl.utils.dataset import parse_dataset
 from mushroom_rl.utils.value_functions import compute_gae
 
 
-class VAE(nn.Module):
+class VAENet(nn.Module):
     """
     Variational-Autoencoder network.
 
     """
     def __init__(self, input_shape, output_shape, n_features, z_size, **kwargs):
-        super(VAE, self).__init__()
+        super(VAENet, self).__init__()
 
         n_input = input_shape[-1]
         n_output = output_shape[-1]
@@ -124,7 +124,7 @@ class VAIL(TRPO):
                  n_epochs_line_search=10, n_epochs_cg=10,
                  cg_damping=1e-2, cg_residual_tol=1e-10,
                  demonstrations=None, info_constraint=0.5, lr_beta=1e-4,
-                 env_reward_frac=0.0, state_mask=None, act_mask=None, quiet=True,
+                 env_reward_frac=0.0, state_mask=None, act_mask=None,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
@@ -132,13 +132,13 @@ class VAIL(TRPO):
         super(VAIL, self).__init__(mdp_info, policy, critic_params,
                                    ent_coeff, max_kl, lam, n_epochs_line_search,
                                    n_epochs_cg, cg_damping, cg_residual_tol,
-                                   quiet=quiet, critic_fit_params=critic_fit_params)
+                                   critic_fit_params=critic_fit_params)
 
         # discriminator params
         self._discriminator_fit_params = (dict() if discriminator_fit_params is None
                                           else discriminator_fit_params)
 
-        discriminator_params["network"] = VAE
+        discriminator_params["network"] = VAENet
         discriminator_params["loss"] = VDBloss(info_constraint, lr_beta)
         discriminator_params.setdefault("z_size", 8)
         discriminator_params.setdefault("batch_size", 128)
@@ -221,7 +221,7 @@ class VAIL(TRPO):
         self._V.fit(x, v_target, **self._critic_fit_params)
 
         # Print fit information
-        self._print_fit_info(dataset, x, v_target, old_pol_dist)
+        self._log_info(dataset, x, v_target, old_pol_dist)
         self._iter += 1
 
     def _fit_discriminator(self, plcy_obs, plcy_act):
