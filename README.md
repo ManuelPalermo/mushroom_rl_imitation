@@ -1,8 +1,8 @@
 # Imitation_Learning
 Imitation Learning Algorithms (and IRL) based on RL library [mushroom_rl](https://github.com/MushroomRL/mushroom-rl).
 
-- IL Implemented Algorithms: GAIL, VAIL 
-    - PPO or TRPO policy update versions available;
+- IL Implemented Algorithms: [GAIL](https://arxiv.org/pdf/1606.03476.pdf), [VAIL](https://arxiv.org/pdf/1810.00821.pdf)
+    - [PPO](https://arxiv.org/pdf/1707.06347.pdf) or [TRPO](https://arxiv.org/pdf/1502.05477.pdf) policy update versions available;
     - Option for easy states/actions selection for descriminator;
     
 - IRL Implemented Algorithms: SCIRL

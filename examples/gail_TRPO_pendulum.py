@@ -160,8 +160,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                       cg_residual_tol=1e-10,
                       n_epochs_discriminator=n_epochs_discriminator,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
@@ -251,8 +250,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                       lr_beta=lr_beta,
                       n_epochs_discriminator=n_epochs_discriminator,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
