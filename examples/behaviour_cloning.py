@@ -86,8 +86,7 @@ def _create_ppo_agent(mdp):
                       n_epochs_policy=n_epochs_policy,
                       batch_size=batch_size_policy,
                       eps_ppo=clip_eps_ppo,
-                      lam=gae_lambda,
-                      quiet=True
+                      lam=gae_lambda
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
