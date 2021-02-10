@@ -383,7 +383,7 @@ def experiment(algorithm, env_kwargs, n_expert_trajectories,
 
 if __name__ == "__main__":
     # algorithm to use(only GAIL and VAIL available)
-    algorithm = ["GAIL", "VAIL"][1]
+    algorithm = ["GAIL", "VAIL"][0]
 
     # gym environment to use(env_id can be any gym env, as long
     # as demonstrations are available for it)

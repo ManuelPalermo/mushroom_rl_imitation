@@ -24,14 +24,15 @@ class GAIL(PPO):
     def __init__(self, mdp_info, policy_class, policy_params,
                  discriminator_params, critic_params, actor_optimizer,
                  n_epochs_policy, n_epochs_discriminator, batch_size_policy,
-                 eps_ppo, lam, demonstrations=None, env_reward_frac=0.0,
-                 state_mask=None, act_mask=None,
+                 eps_ppo, lam, ent_coeff=0.01, demonstrations=None,
+                 env_reward_frac=0.0, state_mask=None, act_mask=None,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
         policy = policy_class(**policy_params)
         super(GAIL, self).__init__(mdp_info, policy, actor_optimizer, critic_params,
                                    n_epochs_policy, batch_size_policy, eps_ppo, lam,
+                                   ent_coeff=ent_coeff,
                                    critic_fit_params=critic_fit_params)
 
         # discriminator params
@@ -92,7 +93,7 @@ class GAIL(PPO):
 
         # fit actor_critic
         v_target, np_adv = compute_gae(self._V, x, xn, r, absorbing, last,
-                                       self.mdp_info.gamma, self._lambda)
+                                       self.mdp_info.gamma, self._lambda.get_value())
         np_adv = (np_adv - np.mean(np_adv)) / (np.std(np_adv) + 1e-8)
         adv = to_float_tensor(np_adv, self.policy.use_cuda)
 

@@ -29,7 +29,7 @@ class GAIL(TRPO):
                  n_epochs_line_search=10, n_epochs_cg=10,
                  cg_damping=1e-2, cg_residual_tol=1e-10,
                  demonstrations=None, env_reward_frac=0.0,
-                 state_mask=None, act_mask=None, disc_seq_size=2, quiet=True,
+                 state_mask=None, act_mask=None, disc_seq_size=2,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
@@ -37,7 +37,7 @@ class GAIL(TRPO):
         super(GAIL, self).__init__(mdp_info, policy, critic_params,
                                    ent_coeff, max_kl, lam, n_epochs_line_search,
                                    n_epochs_cg, cg_damping, cg_residual_tol,
-                                   quiet=quiet, critic_fit_params=critic_fit_params)
+                                   critic_fit_params=critic_fit_params)
 
         # discriminator params
         self._discriminator_fit_params = (dict() if discriminator_fit_params is None
@@ -136,7 +136,7 @@ class GAIL(TRPO):
         self._V.fit(x, v_target, **self._critic_fit_params)
 
         # Print fit information
-        self._print_fit_info(dataset, x, v_target, old_pol_dist)
+        self._log_info(dataset, x, v_target, old_pol_dist)
         self._iter += 1
 
     @torch.no_grad()

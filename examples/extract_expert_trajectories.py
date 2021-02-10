@@ -156,8 +156,8 @@ def train_expert_from_scratch_and_save_trajectories(env_id, n_save_trajectories,
         parse_dataset(expert_dataset)
 
     os.makedirs("./expert_data/", exist_ok=True)
-    np.savez(file="./expert_data/expert_dataset_{}_{}.npz".format(env_id,
-                                                                  round(float(np.mean(compute_J(expert_dataset))), 2)),
+    np.savez(file="./expert_data/expert_dataset_{}_{}.npz"
+             .format(env_id, round(float(np.mean(compute_J(expert_dataset))), 2)),
              obs=states,
              actions=actions,
              episode_starts=np.roll(last, -1),

@@ -1,0 +1,3 @@
+
+-add pytest+coverage
+-add (travis or github actions) to check builds

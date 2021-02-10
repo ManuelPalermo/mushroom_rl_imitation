@@ -193,7 +193,7 @@ class VAIL(TRPO):
             r = r * self._env_reward_frac + r_disc * (1 - self._env_reward_frac)
 
         v_target, np_adv = compute_gae(self._V, x, xn, r, absorbing, last,
-                                       self.mdp_info.gamma, self._lambda)
+                                       self.mdp_info.gamma, self._lambda.get_value())
         np_adv = (np_adv - np.mean(np_adv)) / (np.std(np_adv) + 1e-8)
         adv = to_float_tensor(np_adv, self.policy.use_cuda)
 

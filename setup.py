@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-requires_list = ["mushroom_rl>=1.6.0"]
+requires_list = ["mushroom_rl>=1.5.0"]
 
 setup(name='mushroom_rl_imitation',
       version='0.1',

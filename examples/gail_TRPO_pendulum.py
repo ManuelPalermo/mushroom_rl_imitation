@@ -151,7 +151,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                                 use_cuda=use_cuda,
                                 )
 
-    alg_params = dict(ent_coeff=0.,
+    alg_params = dict(ent_coeff=0.01,
                       max_kl=.001,
                       lam=gae_lambda,
                       n_epochs_line_search=10,

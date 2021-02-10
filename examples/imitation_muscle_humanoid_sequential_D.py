@@ -172,8 +172,7 @@ def _create_gail_agent(mdp, **kwargs):
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
@@ -274,8 +273,7 @@ def _create_vail_agent(mdp, **kwargs):
                       info_constraint=info_constraint,
                       lr_beta=lr_beta,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)

@@ -141,5 +141,4 @@ def experiment():
     J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
     print('After BC -> J: {}, R: {}'.format(J_mean, R_mean))
 
-
 experiment()

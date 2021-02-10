@@ -26,16 +26,16 @@ class GAIL(PPO):
     def __init__(self, mdp_info, policy_class, policy_params,
                  discriminator_params, critic_params, actor_optimizer,
                  n_epochs_policy, n_epochs_discriminator, batch_size_policy,
-                 eps_ppo, lam, ent_weight, demonstrations=None, env_reward_frac=0.0,
-                 state_mask=None, act_mask=None, disc_seq_size=2, quiet=True,
+                 eps_ppo, lam, ent_coeff=0.01, demonstrations=None, env_reward_frac=0.0,
+                 state_mask=None, act_mask=None, disc_seq_size=2,
                  critic_fit_params=None, discriminator_fit_params=None):
 
         # initialize PPO agent
         policy = policy_class(**policy_params)
         super(GAIL, self).__init__(mdp_info, policy, actor_optimizer, critic_params,
                                    n_epochs_policy, batch_size_policy, eps_ppo, lam,
-                                   quiet=quiet, critic_fit_params=critic_fit_params,
-                                   ent_weight=ent_weight)
+                                   critic_fit_params=critic_fit_params,
+                                   ent_coeff=ent_coeff)
 
         # discriminator params
         self._discriminator_fit_params = (dict() if discriminator_fit_params is None
@@ -106,7 +106,7 @@ class GAIL(PPO):
 
         # fit actor_critic
         v_target, np_adv = compute_gae(self._V, x, xn, r, absorbing, last,
-                                       self.mdp_info.gamma, self._lambda)
+                                       self.mdp_info.gamma, self._lambda.get_value())
         np_adv = (np_adv - np.mean(np_adv)) / (np.std(np_adv) + 1e-8)
         adv = to_float_tensor(np_adv, self.policy.use_cuda)
 
@@ -117,7 +117,7 @@ class GAIL(PPO):
         self._update_policy(obs, act, adv, old_log_p)
 
         # Print fit information
-        self._print_fit_info(dataset, x, v_target, old_pol_dist)
+        self._log_info(dataset, x, v_target, old_pol_dist)
         self._iter += 1
 
     @torch.no_grad()
