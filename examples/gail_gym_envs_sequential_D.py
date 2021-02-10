@@ -73,14 +73,14 @@ class ActorNetwork(nn.Module):
 
 
 class DiscriminatorNetwork(nn.Module):
-    def __init__(self, input_shape, output_shape, n_features, seq_size, **kwargs):
+    def __init__(self, input_shape, output_shape, n_features, **kwargs):
         super(DiscriminatorNetwork, self).__init__()
 
-        n_input = input_shape[-1] * seq_size
+        n_input = input_shape[-1]
         n_output = output_shape[0]
 
-        self._in = nn.Linear(n_input, n_features[0])
-        self._h1 = nn.Linear(n_features[0], n_features[1])
+        self._in = nn.Conv1d(n_input, n_features[0], kernel_size=3, padding=1, stride=2)
+        self._h1 = nn.Conv1d(n_features[0], n_features[1], kernel_size=3, padding=1)
         self._out = nn.Linear(n_features[1], n_output)
 
         nn.init.xavier_uniform_(self._in.weight,
@@ -91,9 +91,10 @@ class DiscriminatorNetwork(nn.Module):
                                 gain=nn.init.calculate_gain('sigmoid'))
 
     def forward(self, x, **kwargs):
-        x = x.reshape(x.shape[0], -1)   # flatten time dimension
+        x = x.transpose(1, 2)       # convert data to [B, C, S, ...] for conv1D
         x = F.leaky_relu(self._in(x), 0.2)
         x = F.leaky_relu(self._h1(x), 0.2)
+        x = torch.mean(x, dim=-1)   # global average poll time dimension
         out = torch.sigmoid(self._out(x))
         return out
 
@@ -124,7 +125,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
 
     n_epochs_discriminator = 1
     batch_size_discriminator = 256
-    seq_size_discriminator = 2
+    seq_size_discriminator = 3
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -171,8 +172,7 @@ def _create_gail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                       eps_ppo=clip_eps_ppo,
                       lam=gae_lambda,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
 
@@ -220,7 +220,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
     batch_size_discriminator = 256
     info_constraint = 0.5
     lr_beta = 5e-5
-    seq_size_discriminator = 2
+    seq_size_discriminator = 3
 
     discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
     discrim_act_mask = [] if disc_only_state else np.arange(mdp_info.action_space.shape[0])
@@ -270,8 +270,7 @@ def _create_vail_agent(mdp, expert_data, disc_only_state=False, **kwargs):
                       info_constraint=info_constraint,
                       lr_beta=lr_beta,
                       state_mask=discrim_obs_mask,
-                      act_mask=discrim_act_mask,
-                      quiet=True
+                      act_mask=discrim_act_mask
                       )
 
     # TorchApproximator parameters (used for behaviour cloning)
@@ -366,7 +365,7 @@ def experiment(algorithm, env_kwargs, n_expert_trajectories,
 
     epoch_js = []
     # gail train loop
-    for it in range(50):
+    for it in range(75):
         core.learn(n_steps=10000, n_steps_per_fit=1024)
         dataset = core.evaluate(n_episodes=10)
         J_mean = np.mean(compute_J(dataset, mdp.info.gamma))
@@ -403,4 +402,4 @@ if __name__ == "__main__":
 
     experiment(algorithm=algorithm, env_kwargs=env_kwargs,
                n_expert_trajectories=n_expert_trajectories,
-               init_bc=True, discr_only_state=True)
+               init_bc=False, discr_only_state=True)
