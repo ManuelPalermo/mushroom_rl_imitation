@@ -54,7 +54,8 @@ def minibatch_generator_sequential(batch_size, seq_size, *dataset):
         yield batch
 
 
-def minibatch_sample(batch_size, *dataset, continuous=False):
+def minibatch_sample(batch_size, *dataset, continuous=False,
+                     sample_prob=None):
     """
     Same as minibatch generator but only samples 1 random batch
     from the dataset.
@@ -63,22 +64,29 @@ def minibatch_sample(batch_size, *dataset, continuous=False):
         batch_size (int): the maximum size of each minibatch;
         continuous(bool): if the sampled batch data is continuous.
         dataset: the dataset to sample from.
+        sample_prob (None, np.ndarray): prob of sampling each point
+            in the dataset. Or uniform prob if None.
 
     Returns:
         A batch from the dataset.
 
     """
     size = len(dataset[0])
+    if sample_prob is not None:
+         sample_prob = sample_prob[:size] / sample_prob[:size].sum()
+
     if continuous:
-        batch_start = np.random.randint(0, size - batch_size)
+        batch_start = np.random.choice(range(size - batch_size),
+                                       p=sample_prob)
         indexes = np.arange(batch_start, batch_start + batch_size)
     else:
         indexes = np.random.choice(range(size), min(size, batch_size),
-                                   replace=False)
+                                   replace=False, p=sample_prob)
     return [dataset[i][indexes] for i in range(len(dataset))]
 
 
-def minibatch_sample_sequential(batch_size, seq_size, *dataset, continuous=False):
+def minibatch_sample_sequential(batch_size, seq_size, *dataset,
+                                continuous=False, sample_prob=None):
     """
     Same as minibatch generator sequential but only samples 1 random
     batch from the dataset. An extra dimension is added to the
@@ -89,18 +97,26 @@ def minibatch_sample_sequential(batch_size, seq_size, *dataset, continuous=False
         seq_size (int): size of the sequence to generate;
         continuous(bool): if the sampled batch data is continuous;
         dataset: the dataset to sample from.
+        sample_prob (None, np.ndarray): prob of sampling each point
+            in the dataset. Or uniform prob if None.
 
     Returns:
         A batch from the dataset.
 
     """
+
     size = len(dataset[0]) - (seq_size - 1)
+
+    if sample_prob is not None:
+         sample_prob = sample_prob[:size] / sample_prob[:size].sum()
+
     if continuous:
-        batch_start = np.random.randint(0, size - batch_size)
+        batch_start = np.random.choice(range(size - batch_size),
+                                       p=sample_prob)
         indexes = np.arange(batch_start, batch_start + batch_size)
     else:
         indexes = np.random.choice(range(size), min(size, batch_size),
-                                   replace=False)
+                                   replace=False, p=sample_prob)
     batch = []
     for i in range(len(dataset)):
         batch.append(np.array(
