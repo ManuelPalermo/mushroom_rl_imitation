@@ -168,6 +168,8 @@ class VAIL(PPO):
         self._add_save_attr(
             _discriminator_fit_params='pickle',
             _D='pickle',
+            _n_epochs_discriminator='pickle',
+            _disc_seq_size='pickle',
             _env_reward_frac='pickle',
             _demonstrations='pickle',
             _act_mask='pickle',
